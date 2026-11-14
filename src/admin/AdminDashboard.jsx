@@ -4190,6 +4190,7 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [pageError, setPageError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [activeTab, setActiveTab] = useState("brand");
 
   const openAddBanner = () => setBannerModal({ id: null, data: EMPTY_BANNER });
 
@@ -4247,27 +4248,93 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
   const refreshAll = () => Promise.all([onReload(), onReloadImages()]);
   const imageProps = { api, images, loading: imagesLoading, onReload: onReloadImages, onNotice };
 
-  return (
-    <section className="admin-content">
-      <PageHeading
-        title="Marketing Management"
-        description="Manage the homepage hero image, logo, store and category images, banners and promotional offers."
-        action={<RefreshButton onClick={refreshAll} loading={loading || imagesLoading} />}
-      />
+  
+return (
+  <section className="admin-content">
+    <PageHeading
+      title="Marketing Management"
+      description="Manage your website branding, category images, banners and promotional offers."
+      action={
+        <RefreshButton
+          onClick={refreshAll}
+          loading={loading || imagesLoading}
+        />
+      }
+    />
 
-      <ErrorMessage>{pageError}</ErrorMessage>
+    <ErrorMessage>{pageError}</ErrorMessage>
 
-      <div className="marketing-image-row">
-        <SingleImageEditor {...imageProps} slot={LOGO_IMAGE_SLOT} />
-        <SingleImageEditor {...imageProps} slot={STORE_IMAGE_SLOT} />
-        <SingleImageEditor {...imageProps} slot={HERO_IMAGE_SLOT} />
+    {/* MARKETING TABS */}
+    <div className="marketing-tabs" role="tablist" aria-label="Marketing sections">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "brand"}
+        className={`marketing-tab ${activeTab === "brand" ? "active" : ""}`}
+        onClick={() => setActiveTab("brand")}
+      >
+        Brand Assets
+      </button>
+
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "categories"}
+        className={`marketing-tab ${activeTab === "categories" ? "active" : ""}`}
+        onClick={() => setActiveTab("categories")}
+      >
+        Category Images
+      </button>
+
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "banners"}
+        className={`marketing-tab ${activeTab === "banners" ? "active" : ""}`}
+        onClick={() => setActiveTab("banners")}
+      >
+        Marketing Banners
+      </button>
+
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "offer"}
+        className={`marketing-tab ${activeTab === "offer" ? "active" : ""}`}
+        onClick={() => setActiveTab("offer")}
+      >
+        Promotional Offer
+      </button>
+    </div>
+
+    {/* BRAND ASSETS */}
+    {activeTab === "brand" && (
+      <div className="marketing-tab-content">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Brand Assets</h3>
+            <p>Manage your logo, store image and homepage hero image.</p>
+          </div>
+        </div>
+
+        <div className="marketing-image-row">
+          <SingleImageEditor {...imageProps} slot={LOGO_IMAGE_SLOT} />
+          <SingleImageEditor {...imageProps} slot={STORE_IMAGE_SLOT} />
+          <SingleImageEditor {...imageProps} slot={HERO_IMAGE_SLOT} />
+        </div>
       </div>
+    )}
 
+    {/* CATEGORY IMAGES */}
+    {activeTab === "categories" && (
       <div className="admin-table-card category-images-card">
         <div className="admin-table-heading">
           <div>
             <h3>Shop by Category Images</h3>
-            <p>Shown on the customer site in this order: Eyeglasses, Sunglasses, Power Sunglasses, Computer Glasses, Contact Lenses, Accessories.</p>
+            <p>
+              Manage images for Eyeglasses, Sunglasses, Power Sunglasses,
+              Computer Glasses, Contact Lenses and Accessories.
+            </p>
           </div>
         </div>
 
@@ -4275,8 +4342,10 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
           <CategoryImagesEditor {...imageProps} />
         </div>
       </div>
+    )}
 
-      {/* BANNERS */}
+    {/* MARKETING BANNERS */}
+    {activeTab === "banners" && (
       <div className="admin-table-card">
         <div className="admin-table-heading">
           <div>
@@ -4284,7 +4353,11 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
             <span>{banners.length} banners</span>
           </div>
 
-          <button type="button" className="admin-primary-button" onClick={openAddBanner}>
+          <button
+            type="button"
+            className="admin-primary-button"
+            onClick={openAddBanner}
+          >
             <Plus size={17} aria-hidden="true" />
             Add Banner
           </button>
@@ -4315,10 +4388,18 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
                   return (
                     <tr key={banner.id}>
                       <td>
-                        <img src={banner.imageUrl} alt="" className="admin-banner-thumb" />
+                        <img
+                          src={banner.imageUrl}
+                          alt=""
+                          className="admin-banner-thumb"
+                        />
                       </td>
                       <td>{banner.title}</td>
-                      <td>{BANNER_PLACEMENTS.find((p) => p.value === banner.placement)?.label ?? banner.placement}</td>
+                      <td>
+                        {BANNER_PLACEMENTS.find(
+                          (p) => p.value === banner.placement
+                        )?.label ?? banner.placement}
+                      </td>
                       <td>{banner.displayOrder}</td>
                       <td>
                         <StatusBadge active={banner.active} />
@@ -4356,13 +4437,15 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
           </div>
         )}
       </div>
+    )}
 
-      {/* OFFER BAR */}
+    {/* PROMOTIONAL OFFER */}
+    {activeTab === "offer" && (
       <div className="admin-table-card">
         <div className="admin-table-heading">
           <div>
             <h3>Promotional Offer Bar</h3>
-            <p>The message shown across the top of the website.</p>
+            <p>The promotional message displayed across the top of your website.</p>
           </div>
         </div>
 
@@ -4382,33 +4465,57 @@ function MarketingPage({ api, banners, offer, loading, onReload, onNotice, image
               <strong>Status:</strong> {offer.active ? "Active" : "Inactive"}
             </p>
             <p>
-              <strong>Start:</strong> {offer.startDateTime ? formatDateTime(offer.startDateTime) : "Not specified"}
+              <strong>Start:</strong>{" "}
+              {offer.startDateTime
+                ? formatDateTime(offer.startDateTime)
+                : "Not specified"}
             </p>
             <p>
-              <strong>End:</strong> {offer.endDateTime ? formatDateTime(offer.endDateTime) : "Not specified"}
+              <strong>End:</strong>{" "}
+              {offer.endDateTime
+                ? formatDateTime(offer.endDateTime)
+                : "Not specified"}
             </p>
           </div>
         ) : (
-          <div className="admin-empty">No promotional offer configured.</div>
+          <div className="admin-empty">
+            No promotional offer configured.
+          </div>
         )}
 
         <div className="admin-offer-footer">
-          <button type="button" className="admin-primary-button" onClick={() => setOfferModalOpen(true)}>
+          <button
+            type="button"
+            className="admin-primary-button"
+            onClick={() => setOfferModalOpen(true)}
+          >
             <Pencil size={16} aria-hidden="true" />
             {offer ? "Edit Offer" : "Create Offer"}
           </button>
         </div>
       </div>
+    )}
 
-      {bannerModal && (
-        <BannerModal api={api} initial={bannerModal} onClose={() => setBannerModal(null)} onSaved={handleBannerSaved} />
-      )}
+    {bannerModal && (
+      <BannerModal
+        api={api}
+        initial={bannerModal}
+        onClose={() => setBannerModal(null)}
+        onSaved={handleBannerSaved}
+      />
+    )}
 
-      {offerModalOpen && (
-        <OfferModal api={api} existing={offer} onClose={() => setOfferModalOpen(false)} onSaved={handleOfferSaved} />
-      )}
-    </section>
-  );
+    {offerModalOpen && (
+      <OfferModal
+        api={api}
+        existing={offer}
+        onClose={() => setOfferModalOpen(false)}
+        onSaved={handleOfferSaved}
+      />
+    )}
+  </section>
+);
+
 }
 
 /* =========================

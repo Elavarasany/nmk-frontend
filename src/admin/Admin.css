@@ -3410,3 +3410,65 @@
   max-height: 320px;
   object-fit: contain;
 }
+/* MARKETING TAB NAVIGATION */
+.marketing-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 8px;
+  background: #f1f3f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.marketing-tab {
+  padding: 11px 18px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.marketing-tab:hover {
+  background: #ffffff;
+  color: #0b1f3a;
+}
+
+.marketing-tab.active {
+  background: #0b1f3a;
+  color: #ffffff;
+  border-color: #0b1f3a;
+}
+
+.marketing-tab-content {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.marketing-tab-content > .admin-table-heading {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 600px) {
+  .marketing-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketing-tab {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .marketing-tab-content {
+    padding: 12px;
+  }
+}
