@@ -3558,10 +3558,27 @@
   font-weight: 400;
 }
 
+.settings-preference-card .admin-form-group input[type="number"],
 .settings-preference-card .admin-form-group select {
   width: 100%;
   max-width: 380px;
-  min-height: 42px;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--admin-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--admin-navy);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  box-shadow: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-preference-card .admin-form-group input[type="number"]:focus,
+.settings-preference-card .admin-form-group select:focus {
+  border-color: var(--admin-navy);
+  box-shadow: 0 0 0 3px rgba(11, 31, 58, 0.08);
 }
 
 .settings-stepper {
@@ -3714,8 +3731,8 @@
     padding: 0 16px 18px;
   }
 
-  .settings-stepper,
-  .settings-preference-card .admin-form-group select {
-    max-width: none;
-  }
+  .settings-preference-card .admin-form-group input[type="number"],
+.settings-preference-card .admin-form-group select {
+  max-width: none;
+}
 }

@@ -4803,7 +4803,7 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
 
       <ErrorMessage>{formError}</ErrorMessage>
 
-      <div className="admin-table-card">
+      <div className="admin-table-card settings-preference-card">
         <div className="admin-table-heading">
           <div>
             <h3>Inventory</h3>
@@ -4840,7 +4840,7 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
         </div>
       </div>
 
-      <div className="admin-table-card">
+      <div className="admin-table-card settings-preference-card settings-safety-card">
         <div className="admin-table-heading">
           <div>
             <h3>Dashboard and safety</h3>
