@@ -2555,29 +2555,49 @@ const RX_FIELDS = [
 
 // Prescription the customer entered for one item. Shown only when the order record includes it;
 // otherwise the admin sees that the values were not recorded.
+
 function PrescriptionBlock({ item }) {
   const rx = item.prescription;
 
   if (!rx) {
     return (
       <p className="order-detail-small">
-        {item.productName}: no prescription was saved for this item. Orders placed before prescriptions were saved show this.
+        {item.productName}: no prescription was saved for this item.
+        Orders placed before prescriptions were saved show this.
       </p>
     );
   }
 
+  // Uploaded prescription image or PDF.
   if (rx.mode === "image") {
-    const isPdf = /\.pdf(\?|$)/i.test(rx.imageUrl || "") || /\.pdf$/i.test(rx.imageName || "");
+    const isPdf =
+      /\.pdf(\?|$)/i.test(rx.imageUrl || "") ||
+      /\.pdf$/i.test(rx.imageName || "");
 
     return (
       <div className="order-rx-image">
-        <p className="order-detail-main">{item.productName}: uploaded prescription</p>
+        <p className="order-detail-main">
+          {item.productName}: uploaded prescription
+        </p>
 
-        {!rx.imageUrl && <p className="order-detail-small">The file link was not saved for this order.</p>}
+        {!rx.imageUrl && (
+          <p className="order-detail-small">
+            The file link was not saved for this order.
+          </p>
+        )}
 
         {rx.imageUrl && !isPdf && (
-          <a href={rx.imageUrl} target="_blank" rel="noreferrer" className="order-rx-thumb">
-            <img src={rx.imageUrl} alt={`Prescription for ${item.productName}`} loading="lazy" />
+          <a
+            href={rx.imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="order-rx-thumb"
+          >
+            <img
+              src={rx.imageUrl}
+              alt={`Prescription for ${item.productName}`}
+              loading="lazy"
+            />
           </a>
         )}
 
@@ -2592,11 +2612,57 @@ function PrescriptionBlock({ item }) {
     );
   }
 
+  // Contact lens prescription.
+  if (rx.mode === "contact") {
+    const contactFields = [
+      { key: "sph", label: "SPH" },
+      { key: "cyl", label: "CYL" },
+      { key: "axis", label: "Axis" },
+      { key: "boxes", label: "Boxes" },
+    ];
+
+    return (
+      <div className="order-rx-block">
+        <p className="order-detail-main">
+          {item.productName}: contact lens prescription
+        </p>
+
+        <table className="admin-table order-items-table">
+          <thead>
+            <tr>
+              <th scope="col">Power</th>
+              <th scope="col">Right eye</th>
+              <th scope="col">Left eye</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {contactFields.map((field) => (
+              <tr key={field.key}>
+                <td>{field.label}</td>
+                <td>{rx.right?.[field.key] || "–"}</td>
+                <td>{rx.left?.[field.key] || "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // Eyeglasses manual prescription.
   const sameForBoth = Boolean(rx.sameForBothEyes);
   const hasAddition = [rx.right, rx.left].some((row) => row?.add);
+
   const fields = RX_FIELDS.filter((field) => {
-    if (field.key === "cyl" || field.key === "axis") return Boolean(rx.hasCylinder);
-    if (field.key === "add") return hasAddition;
+    if (field.key === "cyl" || field.key === "axis") {
+      return Boolean(rx.hasCylinder);
+    }
+
+    if (field.key === "add") {
+      return hasAddition;
+    }
+
     return true;
   });
 
@@ -2604,7 +2670,11 @@ function PrescriptionBlock({ item }) {
     <div className="order-rx-block">
       <p className="order-detail-main">
         {item.productName}
-        {sameForBoth && <span className="order-detail-small"> · Same power for both eyes</span>}
+        {sameForBoth && (
+          <span className="order-detail-small">
+            {" "}· Same power for both eyes
+          </span>
+        )}
       </p>
 
       <table className="admin-table order-items-table">
@@ -2612,7 +2682,9 @@ function PrescriptionBlock({ item }) {
           <tr>
             <th scope="col">Power</th>
             <th scope="col">Right eye</th>
-            {!sameForBoth && <th scope="col">Left eye</th>}
+            {!sameForBoth && (
+              <th scope="col">Left eye</th>
+            )}
           </tr>
         </thead>
 
@@ -2621,7 +2693,9 @@ function PrescriptionBlock({ item }) {
             <tr key={field.key}>
               <td>{field.label}</td>
               <td>{rx.right?.[field.key] || "–"}</td>
-              {!sameForBoth && <td>{rx.left?.[field.key] || "–"}</td>}
+              {!sameForBoth && (
+                <td>{rx.left?.[field.key] || "–"}</td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -2629,6 +2703,7 @@ function PrescriptionBlock({ item }) {
     </div>
   );
 }
+
 
 function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   const { busyId, error: statusError, update } = useStatusUpdater({
