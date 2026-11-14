@@ -416,18 +416,26 @@ const EMPTY_OFFER = {
 
 // Admin preferences (stored in this browser)
 const SORT_OPTIONS = [
-  { value: "name", label: "Name" },
-  { value: "category", label: "Category" },
-  { value: "price", label: "Price" },
-  { value: "stock", label: "Stock" },
-  { value: "status", label: "Status" },
+  { value: "name-asc", label: "Name (A to Z)" },
+  { value: "name-desc", label: "Name (Z to A)" },
+  { value: "price-asc", label: "Price (Low to High)" },
+  { value: "price-desc", label: "Price (High to Low)" },
+  { value: "recent", label: "Recently Added" },
 ];
 
-const DASHBOARD_ROW_OPTIONS = [3, 5, 10];
+const DASHBOARD_ROW_OPTIONS = [5, 10, 25, 50];
+
+const DEFAULT_SORT_CONFIG = {
+  "name-asc": { key: "name", direction: "asc" },
+  "name-desc": { key: "name", direction: "desc" },
+  "price-asc": { key: "price", direction: "asc" },
+  "price-desc": { key: "price", direction: "desc" },
+  recent: { key: "recent", direction: "desc" },
+};
 
 const DEFAULT_PREFS = {
   lowStockThreshold: 5,
-  defaultProductSort: "name",
+  defaultProductSort: "name-asc",
   dashboardRows: 5,
   confirmProductDelete: true,
 };
@@ -630,6 +638,10 @@ const sortValue = (product, key) => {
       return product.active ? 1 : 0;
     case "category":
       return product.category ?? "";
+    case "recent": {
+      const timestamp = new Date(product.createdAt || 0).getTime();
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    }
     default:
       return getProductTitle(product);
   }
@@ -1787,11 +1799,14 @@ const [importingCsv, setImportingCsv] = useState(false);
   const confirm = useConfirm();
 
   const [search, setSearch] = useState("");
+  const [productNameFilter, setProductNameFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [priceFilter, setPriceFilter] = useState("");
   const [stockFilter, setStockFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [sort, setSort] = useState({ key: prefs.defaultProductSort, direction: "asc" });
+  const [sort, setSort] = useState(
+  DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG["name-asc"]
+);
 
   const [modal, setModal] = useState(null); // null | { mode: "add" } | { mode: "edit", id }
   const [form, setForm] = useState(EMPTY_PRODUCT);
@@ -1815,6 +1830,7 @@ const [importingCsv, setImportingCsv] = useState(false);
       .filter(
         (p) =>
           matchesTerm(term, getProductTitle(p), p.category) &&
+matchesTerm(productNameFilter.trim().toLowerCase(), getProductTitle(p)) &&
           (categoryFilter === "ALL" || p.category === categoryFilter) &&
           String(p.price ?? "").includes(priceFilter.trim()) &&
           String(p.stockQuantity ?? "").includes(stockFilter.trim()) &&
@@ -1830,7 +1846,7 @@ const [importingCsv, setImportingCsv] = useState(false);
 
         return result * direction;
       });
-  }, [products, search, categoryFilter, priceFilter, stockFilter, statusFilter, sort]);
+    }, [products, search, productNameFilter, categoryFilter, priceFilter, stockFilter, statusFilter, sort]);
 
   const handleSort = (key) =>
     setSort((current) => ({
@@ -2180,148 +2196,133 @@ const handleProductCsvImport = async (e) => {
 
       <CsvColumnsGuide />
 
-      <div className="admin-table-card">
+            <div className="admin-table-card settings-preference-card">
         <div className="admin-table-heading">
-          <h3>All Products</h3>
-          <span aria-live="polite">{visibleProducts.length} products</span>
+          <div>
+            <h3>Inventory</h3>
+            <p>Control how low stock alerts and product lists behave across your store catalog.</p>
+          </div>
         </div>
 
-        <div className="admin-table-scroll">
-          <table className="admin-table admin-products-table">
-            <thead>
-              <tr>
-                <SortableTh label="Product" sortKey="name" sort={sort} onSort={handleSort} />
-                <SortableTh label="Category" sortKey="category" sort={sort} onSort={handleSort} />
-                <SortableTh label="Price" sortKey="price" sort={sort} onSort={handleSort} />
-                <SortableTh label="Stock" sortKey="stock" sort={sort} onSort={handleSort} />
-                <SortableTh label="Status" sortKey="status" sort={sort} onSort={handleSort} />
-                <th scope="col">Actions</th>
-              </tr>
+        <div className="admin-form-grid settings-grid">
+          <div className="admin-form-group">
+            <label htmlFor="set-threshold">
+              Low stock alert <span>(units)</span>
+            </label>
+            <p className="settings-field-description">
+              Trigger warning tags when product stock reaches or falls below this amount.
+            </p>
 
-              <tr className="admin-filter-row">
-                <th />
-                <th>
-                  <select
-                    aria-label="Filter by category"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Categories</option>
-                    {categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </th>
-                <th>
-                  <input
-                    type="search"
-                    inputMode="decimal"
-                    placeholder="Filter price"
-                    aria-label="Filter by price"
-                    value={priceFilter}
-                    onChange={(e) => setPriceFilter(e.target.value)}
-                  />
-                </th>
-                <th>
-                  <input
-                    type="search"
-                    inputMode="numeric"
-                    placeholder="Filter stock"
-                    aria-label="Filter by stock quantity"
-                    value={stockFilter}
-                    onChange={(e) => setStockFilter(e.target.value)}
-                  />
-                </th>
-                <th>
-                  <select
-                    aria-label="Filter by status"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Statuses</option>
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </select>
-                </th>
-                <th />
-              </tr>
-            </thead>
+            <div className="settings-stepper">
+              <input
+                id="set-threshold"
+                type="number"
+                min="1"
+                max="500"
+                step="1"
+                value={draft.lowStockThreshold}
+                readOnly
+                aria-label="Low stock alert threshold"
+              />
+              <div className="settings-stepper-actions">
+                <button
+                  type="button"
+                  aria-label="Decrease stock alert threshold"
+                  disabled={Number(draft.lowStockThreshold) <= 1}
+                  onClick={() =>
+                    updateDraft(
+                      "lowStockThreshold",
+                      Math.max(1, Number(draft.lowStockThreshold || 1) - 1)
+                    )
+                  }
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  aria-label="Increase stock alert threshold"
+                  disabled={Number(draft.lowStockThreshold) >= 500}
+                  onClick={() =>
+                    updateDraft(
+                      "lowStockThreshold",
+                      Math.min(500, Number(draft.lowStockThreshold || 1) + 1)
+                    )
+                  }
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
 
-            <tbody>
-              {loading && <EmptyRow colSpan={6}>Loading products...</EmptyRow>}
+          <div className="admin-form-group">
+            <label htmlFor="set-sort">Default product sort</label>
+            <p className="settings-field-description">
+              Determines the default display order for products in the catalog and inventory views.
+            </p>
+            <select
+              id="set-sort"
+              value={draft.defaultProductSort}
+              onChange={(e) => updateDraft("defaultProductSort", e.target.value)}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
-              {!loading &&
-                visibleProducts.map((product) => {
-                  const busy = rowBusyId === product.id;
+      <div className="admin-table-card settings-preference-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Dashboard &amp; Safety</h3>
+            <p>Choose what the dashboard shows and configure safety prompts for destructive actions.</p>
+          </div>
+        </div>
 
-                  return (
-                    <tr key={product.id}>
-                      <td>
-                        <div className="admin-product-name">
-                          {product.imageUrl ? (
-                            <img src={product.imageUrl} alt="" />
-                          ) : (
-                            <div className="admin-product-placeholder" aria-hidden="true">
-                              <Package size={21} />
-                            </div>
-                          )}
-                          <strong>{getProductTitle(product)}</strong>
-                        </div>
-                      </td>
+        <div className="admin-form-grid settings-grid">
+          <div className="admin-form-group">
+            <label htmlFor="set-rows">Rows in Product Overview</label>
+            <p className="settings-field-description">
+              Set how many product records are displayed in the overview.
+            </p>
+            <select
+              id="set-rows"
+              value={draft.dashboardRows}
+              onChange={(e) => updateDraft("dashboardRows", Number(e.target.value))}
+            >
+              {DASHBOARD_ROW_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} rows
+                </option>
+              ))}
+            </select>
+          </div>
 
-                      <td>{product.category}</td>
-                      <td>{formatINR(product.price)}</td>
+          <div className="settings-safety-toggle">
+            <div>
+              <h4>Ask before deleting a product</h4>
+              <p>
+                Require confirmation before permanently removing a product from your database.
+              </p>
+            </div>
 
-                      <td className={isLowStock(product, prefs.lowStockThreshold) ? "admin-stock-low" : ""}>
-                        {product.stockQuantity}
-                      </td>
-
-                      <td>
-                        <button
-                          type="button"
-                          className={`admin-status-toggle ${product.active ? "active" : "inactive"}`}
-                          onClick={() => toggleActive(product)}
-                          disabled={busy}
-                          aria-label={`Mark ${getProductTitle(product)} as ${product.active ? "inactive" : "active"}`}
-                        >
-                          {product.active ? "Active" : "Inactive"}
-                        </button>
-                      </td>
-
-                      <td>
-                        <div className="admin-action-buttons">
-                          <button
-                            type="button"
-                            className="admin-edit-button"
-                            title="Edit product"
-                            aria-label={`Edit ${getProductTitle(product)}`}
-                            onClick={() => openEdit(product)}
-                            disabled={busy}
-                          >
-                            <Pencil size={17} aria-hidden="true" />
-                          </button>
-
-                          <button
-                            type="button"
-                            className="admin-delete-button"
-                            title="Delete product"
-                            aria-label={`Delete ${getProductTitle(product)}`}
-                            onClick={() => deleteProduct(product)}
-                            disabled={busy}
-                          >
-                            <Trash2 size={17} aria-hidden="true" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-              {!loading && visibleProducts.length === 0 && <EmptyRow colSpan={6}>No products found.</EmptyRow>}
-            </tbody>
-          </table>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={draft.confirmProductDelete}
+              aria-label="Ask before deleting a product"
+              className={`settings-switch ${draft.confirmProductDelete ? "is-on" : ""}`}
+              onClick={() =>
+                updateDraft("confirmProductDelete", !draft.confirmProductDelete)
+              }
+            >
+              <span />
+            </button>
+          </div>
         </div>
       </div>
 
