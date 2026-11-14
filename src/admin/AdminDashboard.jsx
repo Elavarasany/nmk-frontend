@@ -2194,9 +2194,110 @@ const handleProductCsvImport = async (e) => {
         <RefreshButton onClick={onReload} loading={loading} />
       </div>
 
+      
       <CsvColumnsGuide />
 
+      <div className="admin-product-toolbar">
+        <span aria-live="polite">
+          {visibleProducts.length} of {products.length} products
+        </span>
+      </div>
+
+      <div className="admin-table-card">
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <SortableTh label="Product" sortKey="name" sort={sort} onSort={handleSort} />
+                <SortableTh label="Category" sortKey="category" sort={sort} onSort={handleSort} />
+                <SortableTh label="Price" sortKey="price" sort={sort} onSort={handleSort} />
+                <SortableTh label="Stock" sortKey="stock" sort={sort} onSort={handleSort} />
+                <SortableTh label="Status" sortKey="status" sort={sort} onSort={handleSort} />
+                <th>Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading && <EmptyRow colSpan={6}>Loading products...</EmptyRow>}
+
+              {!loading && visibleProducts.length === 0 && (
+                <EmptyRow colSpan={6}>
+                  {products.length === 0
+                    ? "No products found. Add your first product."
+                    : "No products match your search or filters."}
+                </EmptyRow>
+              )}
+
+              {!loading && visibleProducts.map((product) => (
+                <tr key={product.id}>
+                  <td data-label="Product">
+                    <div className="order-cell-name">
+                      {getProductTitle(product)}
+                    </div>
+                    <small className="order-cell-sub">
+                      ID: {product.id}
+                    </small>
+                  </td>
+
+                  <td data-label="Category">{product.category || "-"}</td>
+
+                  <td data-label="Price">
+                    {formatINR(product.price, true)}
+                  </td>
+
+                  <td data-label="Stock">
+                    {product.stockQuantity ?? 0}
+                  </td>
+
+                  <td data-label="Status">
+  <button
+    type="button"
+    className={`admin-status-badge ${product.active ? "is-active" : "is-inactive"}`}
+    onClick={() => toggleActive(product)}
+    disabled={rowBusyId === product.id}
+    title="Click to change product status"
+  >
+    {rowBusyId === product.id
+      ? "Updating..."
+      : product.active
+        ? "Active"
+        : "Inactive"}
+  </button>
+</td>
+
+                  <td data-label="Actions">
+                    <div className="admin-row-actions">
+                      <button
+  type="button"
+  className="admin-secondary-button"
+  onClick={() => openEdit(product)}
+  title="Edit product"
+  aria-label="Edit product"
+>
+  <Pencil size={16} aria-hidden="true" />
+</button>
+
+                      <button
+  type="button"
+  className="admin-clear-button"
+  onClick={() => deleteProduct(product)}
+  disabled={rowBusyId === product.id}
+  title="Delete product"
+  aria-label="Delete product"
+>
+  <Trash2 size={16} aria-hidden="true" />
+</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {modal && (
+
         <Modal
           title={modal.mode === "edit" ? "Edit Product" : "Add New Product"}
           subtitle="Enter your product information below."

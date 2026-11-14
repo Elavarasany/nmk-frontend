@@ -3736,3 +3736,117 @@
   max-width: none;
 }
 }
+
+/* =========================================
+   PRODUCTS — STATUS & ACTION BUTTONS
+========================================= */
+
+.admin-status-badge.is-active,
+.admin-status-badge.is-inactive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease, transform 0.15s ease;
+}
+
+.admin-status-badge.is-active {
+  color: #167447;
+  background: #e8f7ee;
+  border-color: #c6ebd5;
+}
+
+.admin-status-badge.is-inactive {
+  color: #a83232;
+  background: #fff0ef;
+  border-color: #f5d0cd;
+}
+
+.admin-status-badge.is-active:hover:not(:disabled) {
+  background: #d5f1e1;
+  border-color: #9edbb9;
+}
+
+.admin-status-badge.is-inactive:hover:not(:disabled) {
+  background: #ffe1df;
+  border-color: #efb5b0;
+}
+
+.admin-status-badge:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.admin-status-badge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Product action buttons */
+.admin-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.admin-row-actions .admin-secondary-button,
+.admin-row-actions .admin-clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 9px;
+  transition: background 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease, transform 0.15s ease;
+}
+
+.admin-row-actions .admin-secondary-button {
+  color: #244f8f;
+  background: #eef4ff;
+  border: 1px solid #d7e4fb;
+}
+
+.admin-row-actions .admin-secondary-button:hover:not(:disabled) {
+  color: #173b72;
+  background: #dce9ff;
+  border-color: #b6cff7;
+  transform: translateY(-1px);
+}
+
+.admin-row-actions .admin-clear-button {
+  color: #c83232;
+  background: #fff1f0;
+  border: 1px solid #f5d4d1;
+}
+
+.admin-row-actions .admin-clear-button:hover:not(:disabled) {
+  color: #a51f1f;
+  background: #ffe2df;
+  border-color: #edb7b2;
+  transform: translateY(-1px);
+}
+
+.admin-row-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.admin-row-actions button:focus-visible,
+.admin-status-badge:focus-visible {
+  outline: 3px solid #c5a46d;
+  outline-offset: 2px;
+}
