@@ -2275,57 +2275,6 @@ const handleProductCsvImport = async (e) => {
         </div>
       </div>
 
-      <div className="admin-table-card settings-preference-card">
-        <div className="admin-table-heading">
-          <div>
-            <h3>Dashboard &amp; Safety</h3>
-            <p>Choose what the dashboard shows and configure safety prompts for destructive actions.</p>
-          </div>
-        </div>
-
-        <div className="admin-form-grid settings-grid">
-          <div className="admin-form-group">
-            <label htmlFor="set-rows">Rows in Product Overview</label>
-            <p className="settings-field-description">
-              Set how many product records are displayed in the overview.
-            </p>
-            <select
-              id="set-rows"
-              value={draft.dashboardRows}
-              onChange={(e) => updateDraft("dashboardRows", Number(e.target.value))}
-            >
-              {DASHBOARD_ROW_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n} rows
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="settings-safety-toggle">
-            <div>
-              <h4>Ask before deleting a product</h4>
-              <p>
-                Require confirmation before permanently removing a product from your database.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={draft.confirmProductDelete}
-              aria-label="Ask before deleting a product"
-              className={`settings-switch ${draft.confirmProductDelete ? "is-on" : ""}`}
-              onClick={() =>
-                updateDraft("confirmProductDelete", !draft.confirmProductDelete)
-              }
-            >
-              <span />
-            </button>
-          </div>
-        </div>
-      </div>
-
       {modal && (
         <Modal
           title={modal.mode === "edit" ? "Edit Product" : "Add New Product"}
