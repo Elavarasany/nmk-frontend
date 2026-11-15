@@ -1887,7 +1887,7 @@ function FilterPanel({
                       <svg viewBox="0 0 88 44" focusable="false">
                         {(() => {
                           const shape = option.value.toLowerCase();
-                          if (shape.includes("round")) return <><circle cx="25" cy="21" r="13" /><circle cx="63" cy="21" r="13 /></>;
+                          if (shape.includes("round")) return <><circle cx="25" cy="21" r="13" /><circle cx="63" cy="21" r="13" /></>;
                           if (shape.includes("oval")) return <><ellipse cx="25" cy="21" rx="17" ry="11" /><ellipse cx="63" cy="21" rx="17" ry="11" /></>;
                           if (shape.includes("aviator")) return <><path d="M8 9 Q25 4 42 11 L39 29 Q25 42 12 28 Z" /><path d="M46 11 Q63 4 80 9 L76 28 Q63 42 49 29 Z" /></>;
                           if (shape.includes("cat")) return <><path d="M7 11 L13 7 Q27 3 42 12 L37 30 Q24 40 12 27 Z" /><path d="M46 12 Q61 3 75 7 L81 11 L76 27 Q64 40 51 30 Z" /></>;
@@ -1901,7 +1901,7 @@ function FilterPanel({
                       <svg viewBox="0 0 88 44" focusable="false">
                         {option.value.toLowerCase().includes("rimless") ? (
                           <><path d="M8 14 L39 14 L39 29 L8 29 Z M49 14 L80 14 L80 29 L49 29 Z" strokeDasharray="2 3" /><path d="M39 20 L49 20 M23 14 L23 8 M65 14 L65 8" /></>
-                        ) : option.value.toLowerCase().includes("semi") ? (
+                        ) : option.value.toLowerCase().includes("rimless") ? (
                           <><path d="M8 10 Q23 6 39 11 L38 27 Q24 36 10 27 Z M49 11 Q65 6 80 10 L78 27 Q64 36 50 27 Z" /><path d="M10 27 Q24 36 38 27 M50 27 Q64 36 78 27" strokeWidth="2.5" /></>
                         ) : (
                           <><rect x="8" y="9" width="32" height="27" rx="9" /><rect x="48" y="9" width="32" height="27" rx="9" /></>
