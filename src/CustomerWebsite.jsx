@@ -649,6 +649,17 @@ function ProductCard({
   onAddToCart,
   onViewDetails,
 }) {
+  const brandLabel = String(product.brand || "").trim();
+  const fullProductName = String(product.name || "");
+  const displayedProductName =
+    brandLabel &&
+    fullProductName.toLowerCase().startsWith(brandLabel.toLowerCase())
+      ? fullProductName
+          .slice(brandLabel.length)
+          .replace(/^[\\s\\-–—|:]+/, "")
+          .trim() || fullProductName
+      : fullProductName;
+
   return (
     <article className="product-card">
       <div className="product-image">
@@ -709,7 +720,7 @@ function ProductCard({
             className="product-name-button"
             onClick={() => onViewDetails(product)}
           >
-            {product.name}
+            {displayedProductName}
           </button>
         </p>
 
