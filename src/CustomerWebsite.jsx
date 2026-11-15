@@ -709,7 +709,7 @@ function ProductCard({
             className="product-name-button"
             onClick={() => onViewDetails(product)}
           >
-            {product.subtitle ? `[${product.subtitle}]` : product.name}
+            {product.subtitle || product.name}
           </button>
         </p>
 
