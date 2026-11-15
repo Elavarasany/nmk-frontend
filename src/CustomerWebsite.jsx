@@ -1870,21 +1870,76 @@ function FilterPanel({
           </div>
         )}
 
-        <ul className="facet-list">
-          {visibleOptions.map((option) => (
-            <li key={option.value}>
-              <label className="facet-option">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(option.value)}
-                  onChange={() => onToggle(active.key, option.value)}
-                />
-                <span className="facet-label">{option.label}</span>
-                <span className="facet-count">{option.count}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        {["shape", "frameStyle", "gender"].includes(active.key) ? (
+          <div className={`visual-facet-grid visual-facet-grid--${active.key}`}>
+            {visibleOptions.map((option) => {
+              const checked = selected.includes(option.value);
+              return (
+                <button
+                  type="button"
+                  key={option.value}
+                  className={`visual-facet-tile ${checked ? "selected" : ""}`}
+                  onClick={() => onToggle(active.key, option.value)}
+                  aria-pressed={checked}
+                >
+                  <span className="visual-facet-art" aria-hidden="true">
+                    {active.key === "shape" ? (
+                      <svg viewBox="0 0 88 44" focusable="false">
+                        {(() => {
+                          const shape = option.value.toLowerCase();
+                          if (shape.includes("round")) return <><circle cx="25" cy="21" r="13" /><circle cx="63" cy="21" r="13 /></>;
+                          if (shape.includes("oval")) return <><ellipse cx="25" cy="21" rx="17" ry="11" /><ellipse cx="63" cy="21" rx="17" ry="11" /></>;
+                          if (shape.includes("aviator")) return <><path d="M8 9 Q25 4 42 11 L39 29 Q25 42 12 28 Z" /><path d="M46 11 Q63 4 80 9 L76 28 Q63 42 49 29 Z" /></>;
+                          if (shape.includes("cat")) return <><path d="M7 11 L13 7 Q27 3 42 12 L37 30 Q24 40 12 27 Z" /><path d="M46 12 Q61 3 75 7 L81 11 L76 27 Q64 40 51 30 Z" /></>;
+                          if (shape.includes("square")) return <><rect x="9" y="8" width="32" height="26" rx="5" /><rect x="47" y="8" width="32" height="26" rx="5" /></>;
+                          if (shape.includes("geometric")) return <><path d="M13 8 L36 8 L42 21 L36 34 L13 34 L7 21 Z" /><path d="M52 8 L75 8 L81 21 L75 34 L52 34 L46 21 Z" /></>;
+                          return <><path d="M8 11 Q24 4 41 12 L39 29 Q25 39 12 29 Z" /><path d="M47 12 Q64 4 80 11 L76 29 Q63 39 49 29 Z" /></>;
+                        })()}
+                        <path d="M41 15 Q44 11 47 15 M2 15 L8 15 M80 15 L86 15" />
+                      </svg>
+                    ) : active.key === "frameStyle" ? (
+                      <svg viewBox="0 0 88 44" focusable="false">
+                        {option.value.toLowerCase().includes("rimless") ? (
+                          <><path d="M8 14 L39 14 L39 29 L8 29 Z M49 14 L80 14 L80 29 L49 29 Z" strokeDasharray="2 3" /><path d="M39 20 L49 20 M23 14 L23 8 M65 14 L65 8" /></>
+                        ) : option.value.toLowerCase().includes("semi") ? (
+                          <><path d="M8 10 Q23 6 39 11 L38 27 Q24 36 10 27 Z M49 11 Q65 6 80 10 L78 27 Q64 36 50 27 Z" /><path d="M10 27 Q24 36 38 27 M50 27 Q64 36 78 27" strokeWidth="2.5" /></>
+                        ) : (
+                          <><rect x="8" y="9" width="32" height="27" rx="9" /><rect x="48" y="9" width="32" height="27" rx="9" /></>
+                        )}
+                        <path d="M40 19 Q44 15 48 19" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 48 48" focusable="false">
+                        <circle cx="24" cy="12" r="6" />
+                        <path d="M12 40 Q12 24 24 24 Q36 24 36 40 M24 25 L24 39" />
+                        {option.value.toLowerCase() === "women" && <path d="M17 25 L24 31 L31 25" />}
+                      </svg>
+                    )}
+                  </span>
+                  <span className="visual-facet-label">{option.label}</span>
+                  <span className="visual-facet-count">{option.count}</span>
+                  {checked && <span className="visual-facet-check" aria-hidden="true">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <ul className="facet-list">
+            {visibleOptions.map((option) => (
+              <li key={option.value}>
+                <label className="facet-option">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(option.value)}
+                    onChange={() => onToggle(active.key, option.value)}
+                  />
+                  <span className="facet-label">{option.label}</span>
+                  <span className="facet-count">{option.count}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {visibleOptions.length === 0 && <p className="facet-empty">No options match this search.</p>}
       </div>
@@ -2523,8 +2578,10 @@ export default function CustomerWebsite() {
       });
     });
 
+    if (selectedCategory !== "All") chips.unshift({ key: "category", value: selectedCategory, label: `Category: ${selectedCategory}` });
+    if (searchTerm.trim()) chips.push({ key: "search", value: searchTerm, label: `Search: ${searchTerm.trim()}` });
     return chips;
-  }, [facetSelections]);
+  }, [facetSelections, selectedCategory, searchTerm]);
 
   const hasActiveFilters = selectedCategory !== "All" || searchTerm.trim() !== "" || activeFilterChips.length > 0;
 
@@ -2722,15 +2779,22 @@ const cartTotal = cart.reduce(
   };
 
   const removeFilterChip = (chip) => {
-    setFacetSelections((prev) => ({
-      ...prev,
-      [chip.key]: (prev[chip.key] ?? []).filter((v) => v !== chip.value),
-    }));
+    if (chip.key === "category") setSelectedCategory("All");
+    else if (chip.key === "search") setSearchTerm("");
+    else {
+      setFacetSelections((prev) => ({
+        ...prev,
+        [chip.key]: (prev[chip.key] ?? []).filter((v) => v !== chip.value),
+      }));
+    }
     setVisibleCount(PAGE_SIZE);
   };
 
   const clearFacets = () => {
     setFacetSelections({});
+    setSelectedCategory("All");
+    setSearchTerm("");
+    setFacetSearch("");
     setVisibleCount(PAGE_SIZE);
   };
 
@@ -3207,7 +3271,7 @@ const cartTotal = cart.reduce(
                     onClick={clearFacets}
                     disabled={activeFilterChips.length === 0}
                   >
-                    Clear all
+                    Clear filters
                   </button>
                   <button type="button" className="filter-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters">
                     <X size={18} aria-hidden="true" />
@@ -3251,6 +3315,7 @@ const cartTotal = cart.reduce(
                 </div>
               )}
 
+              <p className="catalogue-result-count" aria-live="polite">{resultText}</p>
               <div className="product-grid" aria-busy={loadingProducts}>
                 {renderProducts()}
               </div>
