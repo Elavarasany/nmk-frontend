@@ -4276,6 +4276,16 @@ body {
   line-height: 29px;
 }
 
+.website .product-info > .product-price.product-price-no-size {
+  margin-top: 4px;
+}
+
+.website .product-info .product-currency-symbol {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  margin-right: 2px;
+}
+
 .website .product-info > .product-btn {
   margin-top: auto;
 }
