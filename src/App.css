@@ -4308,13 +4308,19 @@ body {
 }
 
 
-/* Keep every product detail on the same left edge */
+/* Match the Figma product-card alignment:
+   category centered; all remaining details share a left edge. */
 .website .product-info {
   align-items: flex-start;
   text-align: left;
 }
 
-.website .product-info .product-category,
+.website .product-info .product-category {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
 .website .product-info .product-brand,
 .website .product-info .product-title,
 .website .product-info .product-size,
