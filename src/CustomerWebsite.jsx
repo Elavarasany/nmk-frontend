@@ -322,42 +322,61 @@ const GENDER_TEXT = { men: "men", women: "women", unisex: "men and women", kids:
 const buildProductOverview = (p) => {
   const s = p.specifications || {};
   const category = p.category || "";
-  const clean = (...parts) => parts.map((x) => String(x ?? "").trim()).filter(Boolean).join(" ");
+  const clean = (...parts) =>
+    parts.map((value) => String(value ?? "").trim()).filter(Boolean).join(" ");
+
+  const brand = clean(p.brand, s.brand);
 
   if (category === "Contact Lenses") {
-    const disposable = s.disposability ? `${String(s.disposability).trim()} disposable` : "";
-    const base = clean(disposable, s.lensColor, s.lensType);
-    const by = s.brand ? `by ${String(s.brand).trim()}` : "";
-    return { title: clean(s.brand), subtitle: clean(base, by), size: "" };
+    const disposable = s.disposability
+      ? `${String(s.disposability).trim()} disposable`
+      : "";
+    return {
+      brand,
+      subtitle: clean(disposable, s.lensColor, s.lensType),
+      size: "",
+    };
   }
 
   if (["Eyeglasses", "Sunglasses", "Power Sunglasses", "Computer Glasses"].includes(category)) {
-    const gender = p.gender ? GENDER_TEXT[String(p.gender).trim().toLowerCase()] || String(p.gender).trim().toLowerCase() : "";
-    const subtitle = clean(s.frameColor, s.shape, category, gender ? `for ${gender}` : "");
-    return { title: clean(s.brand), subtitle, size: clean(s.size) };
+    const gender = p.gender
+      ? GENDER_TEXT[String(p.gender).trim().toLowerCase()] ||
+        String(p.gender).trim().toLowerCase()
+      : "";
+    return {
+      brand,
+      subtitle: clean(s.frameColor, s.shape, category, gender ? `for ${gender}` : ""),
+      size: clean(s.size),
+    };
   }
 
-  return { title: clean(s.brand, s.productType), subtitle: "", size: "" };
+  return {
+    brand,
+    subtitle: clean(s.productType),
+    size: clean(s.size),
+  };
 };
 
 const toProduct = (p) => {
   const overview = buildProductOverview(p);
+
   return {
-  id: p.id,
-  name: overview.title || p.name || p.category || "",
-  subtitle: overview.subtitle,
-  size: overview.size,
-  type: p.category || "Eyewear",
-  gender: p.gender || "",
-  price: formatINR(p.price),
-  numericPrice: Number(p.price || 0),
-  image: p.imageUrl || FALLBACK_IMAGES.product,
-  stockQuantity: Number(p.stockQuantity ?? 0),
-  description: p.description || "",
-  specifications: p.specifications || {},
-  createdAt: p.createdAt || null,
-  isNew: Boolean(p.isNew),
-  isBestSeller: Boolean(p.bestSeller ?? p.isBestSeller),
+    id: p.id,
+    name: p.name || p.productName || p.category || "Eyewear",
+    brand: overview.brand,
+    subtitle: overview.subtitle,
+    size: overview.size,
+    type: p.category || "Eyewear",
+    gender: p.gender || "",
+    price: formatINR(p.price),
+    numericPrice: Number(p.price || 0),
+    image: p.imageUrl || FALLBACK_IMAGES.product,
+    stockQuantity: Number(p.stockQuantity ?? 0),
+    description: p.description || "",
+    specifications: p.specifications || {},
+    createdAt: p.createdAt || null,
+    isNew: Boolean(p.isNew),
+    isBestSeller: Boolean(p.bestSeller ?? p.isBestSeller),
   };
 };
 
@@ -2993,13 +3012,12 @@ const cartTotal = cart.reduce(
         <div className="header-container">
           <a href="#home" className="logo" aria-label="NMK Opticals home">
             {websiteImages.LOGO && !logoFailed ? (
-              <img src={websiteImages.LOGO} alt="NMK Opticals" onError={() => setLogoFailed(true)} />
-            ) : (
-              <>
-                <span>NMK</span>
-                <small>OPTICALS</small>
-              </>
-            )}
+              <img
+                src={websiteImages.LOGO}
+                alt="NMK Opticals"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : null}
           </a>
 
           <nav className="nav-menu" aria-label="Main">
