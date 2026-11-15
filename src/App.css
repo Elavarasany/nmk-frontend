@@ -4181,8 +4181,9 @@ body {
 
 .website .product-image {
   height: 248px;
-  margin: 0 0 0;
+  margin: 0;
   padding: 0;
+  flex: 0 0 248px;
   background: #ffffff;
 }
 
@@ -4198,35 +4199,47 @@ body {
 .website .product-info {
   min-width: 0;
   padding: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .website .product-info .product-brand {
+  display: block;
+  min-height: 20px;
   margin: 0;
   color: #0f172a;
   font-size: 13px;
   font-weight: 800;
-  line-height: 1.5;
+  line-height: 20px;
   letter-spacing: 0.325px;
   text-transform: uppercase;
 }
 
 .website .product-info h3 {
-  min-height: 0;
+  display: block;
+  height: 42px;
+  min-height: 42px;
   margin: 6px 0 0;
+  overflow: hidden;
   color: #475569;
   font-size: 15px;
   font-weight: 400;
-  line-height: 1.38;
+  line-height: 21px;
 }
 
 .website .product-info .product-name-button {
   display: -webkit-box;
+  width: 100%;
+  max-height: 42px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   color: #475569;
   font-weight: 400;
-  line-height: 1.38;
+  line-height: 21px;
+  text-align: left;
   text-decoration: none;
 }
 
@@ -4235,18 +4248,14 @@ body {
   text-decoration: none;
 }
 
-.website .product-info .product-subtitle {
-  margin: 6px 0 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .website .product-info .product-size {
+  display: block;
+  height: 21px;
+  min-height: 21px;
   margin: 6px 0 0;
   color: #64748b;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 21px;
 }
 
 .website .product-info .product-size strong {
@@ -4263,11 +4272,11 @@ body {
   color: #0f172a;
   font-size: 24px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 29px;
 }
 
 .website .product-info > .product-btn {
-  margin-top: 0;
+  margin-top: auto;
 }
 
 @media (max-width: 768px) {
@@ -4278,6 +4287,7 @@ body {
 
   .website .product-image {
     height: 205px;
+    flex-basis: 205px;
   }
 
   .website .product-info > .product-price {
@@ -4292,5 +4302,6 @@ body {
 
   .website .product-image {
     height: 190px;
+    flex-basis: 190px;
   }
 }
