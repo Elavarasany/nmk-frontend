@@ -697,9 +697,9 @@ function ProductCard({
       </div>
 
       <div className="product-info">
-        {product.brand && (
-          <span className="product-brand">{product.brand}</span>
-        )}
+        <span className="product-brand">
+          {product.brand || "\u00a0"}
+        </span>
 
         <h3>
           <button
@@ -711,15 +711,13 @@ function ProductCard({
           </button>
         </h3>
 
-        {product.subtitle && (
-          <p className="product-subtitle">{product.subtitle}</p>
-        )}
-
-        {product.size && (
-          <p className="product-size">
-            Size: <strong>{product.size}</strong>
-          </p>
-        )}
+        <p className="product-size">
+          {product.size ? (
+            <>Size: <strong>{product.size}</strong></>
+          ) : (
+            <span aria-hidden="true">&nbsp;</span>
+          )}
+        </p>
 
         <strong className="product-price">{product.price}</strong>
 
