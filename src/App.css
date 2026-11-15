@@ -4163,3 +4163,134 @@ body {
     height: 48px;
   }
 }
+
+/* NMK Figma product-card treatment */
+.website .product-card {
+  padding: 25px;
+  border: 1px solid #f1f5f9;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.website .product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.09);
+}
+
+.website .product-image {
+  height: 248px;
+  margin: 0 0 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+.website .product-image-button,
+.website .product-image-button img {
+  background: #ffffff;
+}
+
+.website .product-image-button img {
+  object-fit: contain;
+}
+
+.website .product-info {
+  min-width: 0;
+  padding: 0;
+}
+
+.website .product-info .product-brand {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.325px;
+  text-transform: uppercase;
+}
+
+.website .product-info h3 {
+  min-height: 0;
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.38;
+}
+
+.website .product-info .product-name-button {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #475569;
+  font-weight: 400;
+  line-height: 1.38;
+  text-decoration: none;
+}
+
+.website .product-info .product-name-button:hover {
+  color: #0b1f3a;
+  text-decoration: none;
+}
+
+.website .product-info .product-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.website .product-info .product-size {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.website .product-info .product-size strong {
+  display: inline;
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.website .product-info > .product-price {
+  display: block;
+  margin: 18px 0 12px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.website .product-info > .product-btn {
+  margin-top: 0;
+}
+
+@media (max-width: 768px) {
+  .website .product-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .website .product-image {
+    height: 205px;
+  }
+
+  .website .product-info > .product-price {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 380px) {
+  .website .product-card {
+    padding: 14px;
+  }
+
+  .website .product-image {
+    height: 190px;
+  }
+}
