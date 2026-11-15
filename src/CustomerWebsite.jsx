@@ -1899,10 +1899,10 @@ function FilterPanel({
                       </svg>
                     ) : active.key === "frameStyle" ? (
                       <svg viewBox="0 0 88 44" focusable="false">
-                        {option.value.toLowerCase().includes("rimless") ? (
-                          <><path d="M8 14 L39 14 L39 29 L8 29 Z M49 14 L80 14 L80 29 L49 29 Z" strokeDasharray="2 3" /><path d="M39 20 L49 20 M23 14 L23 8 M65 14 L65 8" /></>
-                        ) : option.value.toLowerCase().includes("rimless") ? (
+                        {option.value.toLowerCase().includes("semi") ? (
                           <><path d="M8 10 Q23 6 39 11 L38 27 Q24 36 10 27 Z M49 11 Q65 6 80 10 L78 27 Q64 36 50 27 Z" /><path d="M10 27 Q24 36 38 27 M50 27 Q64 36 78 27" strokeWidth="2.5" /></>
+                        ) : option.value.toLowerCase().includes("rimless") ? (
+                          <><path d="M8 14 L39 14 L39 29 L8 29 Z M49 14 L80 14 L80 29 L49 29 Z" strokeDasharray="2 3" /><path d="M39 20 L49 20 M23 14 L23 8 M65 14 L65 8" /></>
                         ) : (
                           <><rect x="8" y="9" width="32" height="27" rx="9" /><rect x="48" y="9" width="32" height="27" rx="9" /></>
                         )}
