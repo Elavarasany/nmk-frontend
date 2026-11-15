@@ -713,15 +713,16 @@ function ProductCard({
           </button>
         </p>
 
-        <p className="product-size">
-          {product.size ? (
-            <>Size: <strong>{product.size}</strong></>
-          ) : (
-            <span aria-hidden="true">&nbsp;</span>
-          )}
-        </p>
+        {product.size && (
+          <p className="product-size">
+            Size: <strong>{product.size}</strong>
+          </p>
+        )}
 
-        <strong className="product-price">{product.price}</strong>
+        <strong className={`product-price${product.size ? "" : " product-price-no-size"}`}>
+          <span className="product-currency-symbol">₹</span>
+          {Number(product.numericPrice || 0).toLocaleString("en-IN")}
+        </strong>
 
         <StockButton
           product={product}
