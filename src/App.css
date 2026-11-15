@@ -4306,3 +4306,31 @@ body {
     flex-basis: 190px;
   }
 }
+
+
+/* Keep every product detail on the same left edge */
+.website .product-info {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.website .product-info .product-category,
+.website .product-info .product-brand,
+.website .product-info .product-title,
+.website .product-info .product-size,
+.website .product-info > .product-price {
+  width: 100%;
+  text-align: left;
+}
+
+.website .product-info .product-name-button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.website .product-info > .product-price {
+  align-self: flex-start;
+}
