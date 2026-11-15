@@ -697,11 +697,13 @@ function ProductCard({
       </div>
 
       <div className="product-info">
-        <span className="product-brand">
-          {product.brand || "\u00a0"}
-        </span>
+        <span className="product-category">{product.type || "\u00a0"}</span>
 
-        <h3>
+        <h3 className="product-brand">
+          {product.brand || "\u00a0"}
+        </h3>
+
+        <p className="product-title">
           <button
             type="button"
             className="product-name-button"
@@ -709,7 +711,7 @@ function ProductCard({
           >
             {product.name}
           </button>
-        </h3>
+        </p>
 
         <p className="product-size">
           {product.size ? (
