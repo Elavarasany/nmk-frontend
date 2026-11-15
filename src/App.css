@@ -618,6 +618,7 @@ body {
 
 .website .products-section {
   background: var(--surface-products);
+  padding: 55px 1.5%;
 }
 
 
@@ -699,42 +700,63 @@ body {
   overflow: hidden;
   background: #ffffff;
   border: 1px solid #e9edf2;
-  border-radius: 8px;
-  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  border-radius: 18px;
+  box-shadow: 0 4px 14px rgba(11, 31, 58, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .website .product-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 14px 32px rgba(11, 31, 58, 0.09);
-  border-color: #e2d5bd;
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(11, 31, 58, 0.10);
 }
 
 .website .product-image {
   position: relative;
-  height: 260px;
+  height: 224px;
   overflow: hidden;
-  background: #f1f2f4;
+  background: #ffffff;
+  padding: 12px;
 }
 
 .website .product-image-button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   padding: 0;
   border: 0;
-  background: none;
+  background: #ffffff;
+  cursor: pointer;
 }
 
 .website .product-image-button img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s ease;
+  object-fit: contain;
+  transition: transform 0.35s ease;
 }
 
 .website .product-card:hover .product-image-button img {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
+
+.website .product-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 18px 18px;
+}
+
+.website .product-brand {
+  margin-bottom: 5px;
+  color: #8a929d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
 
 .website .wishlist {
   position: absolute;
@@ -1107,7 +1129,20 @@ body {
   justify-content: flex-end;
   background: rgba(9, 23, 42, 0.5);
 }
+.website .site-modal-overlay--top-center {
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px 16px;
+}
 
+.website .site-modal.site-modal--form.site-modal--top-center {
+  width: min(850px, calc(100vw - 32px));
+  max-width: 850px;
+  height: auto;
+  max-height: calc(100vh - 48px);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(9, 23, 42, 0.2);
+}
 .website .site-modal {
   width: 420px;
   max-width: 100%;

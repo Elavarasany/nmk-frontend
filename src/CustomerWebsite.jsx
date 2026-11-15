@@ -485,7 +485,14 @@ function Modal({ title, onClose, closable = true, className = "", children }) {
   useDialog(dialogRef, { onClose, closable });
 
   return (
-    <div className="site-modal-overlay" onClick={() => closable && onClose()}>
+    <div
+  className={`site-modal-overlay ${
+    className.includes("site-modal--top-center")
+      ? "site-modal-overlay--top-center"
+      : ""
+  }`}
+  onClick={() => closable && onClose()}
+>
       <div
         ref={dialogRef}
         tabIndex={-1}
@@ -614,58 +621,99 @@ function StockButton({ product, inCart = 0, onAddToCart }) {
   );
 }
 
-function ProductCard({ product, inCart, isWishlisted, onToggleWishlist, onAddToCart, onViewDetails }) {
+
+function ProductCard({
+  product,
+  inCart,
+  isWishlisted,
+  onToggleWishlist,
+  onAddToCart,
+  onViewDetails,
+}) {
   return (
     <article className="product-card">
       <div className="product-image">
         {(isNewProduct(product) || product.isBestSeller) && (
           <div className="product-badges">
-            {isNewProduct(product) && <span className="badge badge-new">New</span>}
-            {product.isBestSeller && <span className="badge badge-best">Best Seller</span>}
+            {isNewProduct(product) && (
+              <span className="badge badge-new">New</span>
+            )}
+            {product.isBestSeller && (
+              <span className="badge badge-best">Best Seller</span>
+            )}
           </div>
         )}
+
         <button
           type="button"
           className="product-image-button"
           onClick={() => onViewDetails(product)}
           aria-label={`View details for ${product.name}`}
         >
-          <FallbackImage src={product.image} fallback={FALLBACK_IMAGES.product} alt="" loading="lazy" />
+          <FallbackImage
+            src={product.image}
+            fallback={FALLBACK_IMAGES.product}
+            alt=""
+            loading="lazy"
+          />
         </button>
 
         <button
           type="button"
           className={`wishlist ${isWishlisted ? "active" : ""}`}
           onClick={() => onToggleWishlist(product)}
-          aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+          aria-label={
+            isWishlisted
+              ? `Remove ${product.name} from wishlist`
+              : `Add ${product.name} to wishlist`
+          }
           aria-pressed={isWishlisted}
         >
-          <Heart size={18} aria-hidden="true" fill={isWishlisted ? "currentColor" : "none"} />
+          <Heart
+            size={18}
+            aria-hidden="true"
+            fill={isWishlisted ? "currentColor" : "none"}
+          />
         </button>
       </div>
 
       <div className="product-info">
+        {product.brand && (
+          <span className="product-brand">{product.brand}</span>
+        )}
+
         <h3>
           <button
             type="button"
             className="product-name-button"
-            style={{ fontWeight: 700 }}
             onClick={() => onViewDetails(product)}
           >
             {product.name}
           </button>
         </h3>
 
-        {product.subtitle && <p className="product-subtitle" style={{ margin: "4px 0 0" }}>{product.subtitle}</p>}
-        {product.size && <p className="product-size" style={{ margin: "2px 0 8px" }}>Size: {product.size}</p>}
+        {product.subtitle && (
+          <p className="product-subtitle">{product.subtitle}</p>
+        )}
 
-        <strong>{product.price}</strong>
+        {product.size && (
+          <p className="product-size">
+            Size: <strong>{product.size}</strong>
+          </p>
+        )}
 
-        <StockButton product={product} inCart={inCart} onAddToCart={onAddToCart} />
+        <strong className="product-price">{product.price}</strong>
+
+        <StockButton
+          product={product}
+          inCart={inCart}
+          onAddToCart={onAddToCart}
+        />
       </div>
     </article>
   );
 }
+
 
 /* =========================
    LENS CUSTOMISATION
@@ -1149,7 +1197,7 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
       title="Customise Your Eyeglasses"
       onClose={onCancel}
       closable={!uploading}
-      className="site-modal--form"
+      className="site-modal--form site-modal--top-center"
     >
       <div className="lens-customizer">
         <p className="lens-product">
