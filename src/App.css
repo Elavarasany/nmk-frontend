@@ -1133,15 +1133,47 @@ body {
   justify-content: center;
   align-items: flex-start;
   padding: 24px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .website .site-modal.site-modal--form.site-modal--top-center {
+  flex: 0 1 850px;
   width: min(850px, calc(100vw - 32px));
   max-width: 850px;
+  min-width: 0;
   height: auto;
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  margin: 0 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: 14px;
   box-shadow: 0 12px 40px rgba(9, 23, 42, 0.2);
+}
+
+@media (max-width: 600px) {
+  .website .site-modal-overlay--top-center {
+    padding: 12px;
+  }
+
+  .website .site-modal.site-modal--form.site-modal--top-center {
+    flex-basis: 100%;
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    padding-right: 18px;
+    padding-left: 18px;
+    border-radius: 12px;
+  }
+
+  .website .site-modal.site-modal--form.site-modal--top-center .site-modal-header {
+    margin-right: -18px;
+    margin-left: -18px;
+    padding-right: 18px;
+    padding-left: 18px;
+  }
 }
 .website .site-modal {
   width: 420px;
