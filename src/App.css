@@ -3671,3 +3671,134 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Illustrated Power Type Selector */
+
+.website .power-type-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.website .power-type-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 12px rgba(11, 31, 58, 0.05);
+}
+
+.website .power-type-card.selected {
+  border-color: #0284c7;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.12);
+  background: #ffffff;
+}
+
+.website .power-type-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.website .power-type-visual svg {
+  width: 64px;
+  height: 48px;
+}
+
+.website .power-type-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 5px;
+  padding-right: 12px;
+}
+
+.website .power-type-content strong {
+  color: #0b1f3a;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.website .power-type-content small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.website .power-type-radio {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.website .power-type-card.selected .power-type-radio {
+  border-color: #0284c7;
+  background: #0284c7;
+  box-shadow: inset 0 0 0 3px #ffffff;
+}
+
+.website .power-type-card:has(input:focus-visible) {
+  outline: 2px solid #0284c7;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .website .power-type-card {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .website .power-type-visual {
+    width: 72px;
+    height: 72px;
+  }
+
+  .website .power-type-content strong {
+    font-size: 15px;
+  }
+}
+.website .power-type-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.website .power-type-card {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 10px;
+  gap: 10px;
+}
+
+.website .power-type-visual {
+  width: 100%;
+  height: 65px;
+}
+
+.website .power-type-content {
+  padding: 0;
+  align-items: center;
+}
+
+.website .power-type-radio {
+  top: 10px;
+  right: 10px;
+}

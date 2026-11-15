@@ -687,6 +687,62 @@ const POWER_OPTIONS = [
   { value: "Bifocal", description: "Two zones: distance and near vision." },
 ];
 
+function PowerTypeIllustration({ type }) {
+  const frame = (
+    <>
+      <path d="M4 18H10M62 18H68"
+        stroke="#7E8DA0" strokeWidth="2.2" strokeLinecap="round" />
+      <rect x="10" y="10" width="52" height="34" rx="12"
+        fill="none" stroke="#7E8DA0" strokeWidth="2.2" />
+      <path d="M19 16V22"
+        stroke="#D1D9E2" strokeWidth="2" strokeLinecap="round" />
+    </>
+  );
+
+  return (
+    <svg viewBox="0 0 72 48" width="64" height="48" fill="none">
+      {frame}
+
+      {type === "Frame Only" && (
+        <>
+          <circle cx="48" cy="27" r="7.5"
+            stroke="#0ea5e9" strokeWidth="2" />
+          <path d="M43 22L53 32"
+            stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" />
+        </>
+      )}
+
+      {type === "Single Vision" && (
+        <>
+          <path d="M29 27H37M33 23V31"
+            stroke="#0284c7" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M43 27H49"
+            stroke="#0284c7" strokeWidth="2.2" strokeLinecap="round" />
+        </>
+      )}
+
+      {type === "Progressive" && (
+        <>
+          <path d="M18 20C24 24 30 33 36 33C42 33 48 24 54 20"
+            stroke="#94A3B8" strokeWidth="1.8"
+            strokeDasharray="2 2" strokeLinecap="round" />
+          <circle cx="36" cy="33.5" r="3.5" fill="#0284c7" />
+        </>
+      )}
+
+      {type === "Bifocal" && (
+        <>
+          <path d="M22 17C22 17 26 27 36 27C46 27 50 17 50 17"
+            stroke="#CBD5E1" strokeWidth="1.6"
+            strokeDasharray="2 2" strokeLinecap="round" />
+          <ellipse cx="36" cy="34" rx="9" ry="4.5"
+            fill="#bae6fd" stroke="#0284c7" strokeWidth="1.8" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 const LENS_OPTIONS = ["ClearGuard", "ClearGuard Blue", "ClearGuard Plus", "ClearGuard NightDrive"];
 const LENS_FEATURES = {
   ClearGuard: ["Anti-reflective", "Scratch resistance"],
@@ -1058,27 +1114,42 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
           ))}
         </ol>
 
-        {currentStep === "Power Type" && (
-          <fieldset className="choice-group power-type-grid">
-            <legend>Select power type</legend>
+        
+{currentStep === "Power Type" && (
+  <fieldset className="choice-group power-type-grid">
+    <legend>Select power type</legend>
 
-            {POWER_OPTIONS.map((option) => (
-              <label key={option.value} className={`choice-card ${powerType === option.value ? "selected" : ""}`}>
-                <input
-                  type="radio"
-                  name="power-type"
-                  value={option.value}
-                  checked={powerType === option.value}
-                  onChange={() => selectPower(option.value)}
-                />
-                <span>
-                  <strong>{option.value}</strong>
-                  <small>{option.description}</small>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        )}
+    {POWER_OPTIONS.map((option) => (
+      <label
+        key={option.value}
+        className={`power-type-card ${
+          powerType === option.value ? "selected" : ""
+        }`}
+      >
+        <input
+          className="sr-only"
+          type="radio"
+          name="power-type"
+          value={option.value}
+          checked={powerType === option.value}
+          onChange={() => selectPower(option.value)}
+        />
+
+        <span className="power-type-visual" aria-hidden="true">
+          <PowerTypeIllustration type={option.value} />
+        </span>
+
+        <span className="power-type-content">
+          <strong>{option.value}</strong>
+          <small>{option.description}</small>
+        </span>
+
+        <span className="power-type-radio" aria-hidden="true" />
+      </label>
+    ))}
+  </fieldset>
+)}
+
 
         {currentStep === "Lenses" && (
           <>
