@@ -1910,9 +1910,13 @@ function FilterPanel({
                       </svg>
                     ) : (
                       <svg viewBox="0 0 48 48" focusable="false">
-                        <circle cx="24" cy="12" r="6" />
-                        <path d="M12 40 Q12 24 24 24 Q36 24 36 40 M24 25 L24 39" />
-                        {option.value.toLowerCase() === "women" && <path d="M17 25 L24 31 L31 25" />}
+                        {option.value.toLowerCase() === "unisex" ? (
+                          <><circle cx="17" cy="13" r="5" /><circle cx="32" cy="13" r="5" /><path d="M6 39 Q6 25 17 25 Q28 25 28 39 M21 39 Q21 25 32 25 Q43 25 43 39" /></>
+                        ) : option.value.toLowerCase() === "women" ? (
+                          <><circle cx="24" cy="12" r="6" /><path d="M12 40 Q12 24 24 24 Q36 24 36 40 M24 25 L18 39 M24 25 L30 39" /></>
+                        ) : (
+                          <><circle cx="24" cy="12" r="6" /><path d="M10 40 Q10 24 24 24 Q38 24 38 40 M17 30 L31 30" /></>
+                        )}
                       </svg>
                     )}
                   </span>
