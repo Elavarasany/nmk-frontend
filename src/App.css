@@ -3671,7 +3671,6 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-
 /* Illustrated Power Type Selector */
 
 .website .power-type-card {
@@ -3760,21 +3759,6 @@ body {
   outline-offset: 3px;
 }
 
-@media (max-width: 600px) {
-  .website .power-type-card {
-    padding: 16px;
-    gap: 14px;
-  }
-
-  .website .power-type-visual {
-    width: 72px;
-    height: 72px;
-  }
-
-  .website .power-type-content strong {
-    font-size: 15px;
-  }
-}
 .website .power-type-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -3801,4 +3785,314 @@ body {
 .website .power-type-radio {
   top: 10px;
   right: 10px;
+}
+
+/* Illustrated lens type selector */
+
+.website .lens-type-options { gap: 12px; }
+.website .lens-type-options legend { margin-bottom: 0; }
+
+.website .lens-type-intro {
+  margin: -2px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.website .lens-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.website .lens-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(15,23,42,.07);
+}
+
+.website .lens-card.is-selected {
+  border: 2px solid #0f172a;
+  padding: 15px;
+  box-shadow: 0 4px 12px -2px rgba(15,23,42,.08);
+}
+
+.website .lens-card-input,
+.website .photochromic-card-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.website .lens-card-radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+}
+
+.website .lens-card-radio span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0;
+}
+
+.website .lens-card.is-selected .lens-card-radio {
+  border-color: #0f172a;
+  background: #0f172a;
+}
+
+.website .lens-card.is-selected .lens-card-radio span { opacity: 1; }
+
+.website .lens-card:has(.lens-card-input:focus-visible),
+.website .photochromic-card:has(.photochromic-card-input:focus-visible) {
+  outline: 2px solid #0284c7;
+  outline-offset: 3px;
+}
+
+.website .lens-card-illustration,
+.website .photochromic-illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 76px;
+  width: 76px;
+  height: 64px;
+  padding: 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.website .lens-card-illustration svg,
+.website .photochromic-illustration svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.website .lens-card-illustration--blue {
+  border-color: #dbeafe;
+  background: #eff6ff;
+}
+
+.website .lens-card-illustration--plus {
+  border-color: #ccfbf1;
+  background: #f0fdfa;
+}
+
+.website .lens-card-illustration--night {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.website .lens-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.website .lens-card-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.website .lens-card-heading > strong:first-child {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.website .lens-card-price {
+  margin-left: auto;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.website .lens-card-popular {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.website .lens-card-features {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 7px 14px;
+}
+
+.website .lens-card-features > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.website .lens-card-features svg {
+  flex: 0 0 14px;
+  color: #059669;
+}
+
+.website .photochromic-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.website .photochromic-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(15,23,42,.07);
+}
+
+.website .photochromic-card.is-selected {
+  border-color: #0f172a;
+  box-shadow: 0 4px 12px -2px rgba(15,23,42,.08);
+}
+
+.website .photochromic-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 5px;
+  color: transparent;
+}
+
+.website .photochromic-card.is-selected .photochromic-checkbox {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #fff;
+}
+
+.website .photochromic-illustration {
+  flex-basis: 64px;
+  width: 64px;
+  height: 54px;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.website .photochromic-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.website .photochromic-copy strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.website .photochromic-copy small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.website .photochromic-price {
+  flex-shrink: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .website .power-type-card {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .website .power-type-visual {
+    width: 72px;
+    height: 72px;
+  }
+
+  .website .power-type-content strong { font-size: 15px; }
+
+  .website .lens-card {
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .website .lens-card.is-selected { padding: 12px; }
+
+  .website .lens-card-illustration {
+    flex-basis: 60px;
+    width: 60px;
+    height: 54px;
+  }
+
+  .website .lens-card-heading > strong:first-child,
+  .website .lens-card-price { font-size: 14px; }
+
+  .website .lens-card-features {
+    grid-template-columns: minmax(0,1fr);
+    gap: 6px;
+  }
+
+  .website .photochromic-card {
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .website .photochromic-illustration {
+    flex-basis: 54px;
+    width: 54px;
+    height: 48px;
+  }
 }

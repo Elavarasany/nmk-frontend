@@ -865,6 +865,63 @@ const uploadPrescription = async (file) => {
   return data.secure_url;
 };
 
+function LensTypeIllustration({ type }) {
+  if (type === "Photochromic") {
+    return (
+      <svg viewBox="0 0 72 48" aria-hidden="true">
+        <defs>
+          <linearGradient id="photochromic-lens-gradient" x1="0%" x2="100%" y1="0%" y2="0%">
+            <stop offset="0%" stopColor="#334155" stopOpacity="0.8" />
+            <stop offset="52%" stopColor="#64748b" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.95" />
+          </linearGradient>
+        </defs>
+        <rect x="14" y="9" width="38" height="30" rx="9" fill="url(#photochromic-lens-gradient)" stroke="#94a3b8" strokeWidth="2" />
+        <path d="M10 20H14M52 20H55" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="56" cy="14" r="5" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1.2" />
+        <path d="M56 6V8M56 20V22M48 14H50M62 14H64M49 22L45 26M53 24L49 28" stroke="#f59e0b" strokeWidth="1.2" strokeLinecap="round" />
+        <path d="M24 16L21 28M30 16L27 28" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 72 48" aria-hidden="true">
+      <rect x="14" y="8" width="44" height="32" rx="10" fill="#ffffff" stroke={type === "ClearGuard Plus" ? "#64748b" : "#94a3b8"} strokeWidth="2" />
+      <path d="M10 20H14M58 20H62" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+      {type === "ClearGuard" && (
+        <>
+          <path d="M22 15L36 33" stroke="#38bdf8" strokeWidth="1.8" strokeDasharray="2 2" strokeLinecap="round" />
+          <path d="M42 16L48 19V24C48 27.5 45.5 29.5 42 31C38.5 29.5 36 27.5 36 24V19L42 16Z" fill="#e0f2fe" stroke="#0284c7" strokeWidth="1.2" />
+          <path d="M40 23.5L41.5 25L44.5 22" stroke="#0284c7" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+      {type === "ClearGuard Blue" && (
+        <>
+          <path d="M22 17C26 21 28 26 26 31M18 14L28 24L18 34" stroke="#2563eb" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="43" cy="24" r="8" fill="#dbeafe" stroke="#3b82f6" strokeWidth="1.2" />
+          <path d="M43 19V29M38 24H48" stroke="#1d4ed8" strokeWidth="1.4" strokeLinecap="round" />
+        </>
+      )}
+      {type === "ClearGuard Plus" && (
+        <>
+          <path d="M36 15C36 15 30 22 30 25.5C30 28.5 32.7 31 36 31C39.3 31 42 28.5 42 25.5C42 22 36 15 36 15Z" fill="#38bdf8" fillOpacity="0.3" stroke="#0284c7" strokeWidth="1.5" />
+          <path d="M34 23C34 21.5 35 20 36 19" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="48" cy="18" r="1.5" fill="#0ea5e9" />
+          <circle cx="23" cy="27" r="1.5" fill="#0ea5e9" />
+          <path d="M46 25L50 29" stroke="#0ea5e9" strokeWidth="1.2" strokeLinecap="round" />
+        </>
+      )}
+      {type === "ClearGuard NightDrive" && (
+        <>
+          <circle cx="36" cy="24" r="5" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1.2" />
+          <path d="M36 14V17M36 31V34M26 24H29M43 24H46M29 17L31.5 19.5M40.5 28.5L43 31M29 31L31.5 28.5M40.5 19.5L43 17" stroke="#d97706" strokeWidth="1.2" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function PriceBreakdown({ pricing }) {
   return (
     <div className="price-breakdown" aria-label="Price breakdown">
@@ -1153,12 +1210,16 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
 
         {currentStep === "Lenses" && (
           <>
-            <fieldset className="choice-group">
+            <fieldset className="choice-group lens-type-options">
               <legend>Select lens type</legend>
+              <p className="lens-type-intro">
+                Choose the best protective coating and clarity for your prescription lenses.
+              </p>
 
               {LENS_OPTIONS.map((name) => (
-                <label key={name} className={`choice-card choice-row ${lensType === name ? "selected" : ""}`}>
+                <label key={name} className={`lens-card ${lensType === name ? "is-selected" : ""}`}>
                   <input
+                    className="lens-card-input"
                     type="radio"
                     name="lens-type"
                     value={name}
@@ -1168,23 +1229,39 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
                       setError("");
                     }}
                   />
-                  <span className="lens-option-details">
-                    <strong className="lens-option-name">{name}</strong>
-                    <small className="lens-option-features">
-                      {LENS_FEATURES[name].map((feature) => (
-                        <span key={feature}>✓ {feature}</span>
-                      ))}
-                    </small>
+
+                  <span className="lens-card-radio" aria-hidden="true"><span /></span>
+                  <span className={`lens-card-illustration lens-card-illustration--${name === "ClearGuard Blue" ? "blue" : name === "ClearGuard Plus" ? "plus" : name === "ClearGuard NightDrive" ? "night" : "clear"}`} aria-hidden="true">
+                    <LensTypeIllustration type={name} />
                   </span>
-                  <strong className="lens-option-price">{formatINR(LENS_PRICES[powerType]?.[name])}</strong>
+
+                  <span className="lens-card-content">
+                    <span className="lens-card-heading">
+                      <strong>{name}</strong>
+                      {name === "ClearGuard Plus" && <span className="lens-card-popular">Popular</span>}
+                      <strong className="lens-card-price">{formatINR(LENS_PRICES[powerType]?.[name])}</strong>
+                    </span>
+                    <span className="lens-card-features">
+                      {LENS_FEATURES[name].map((feature) => (
+                        <span key={feature}><CheckCircle2 size={14} aria-hidden="true" />{feature}</span>
+                      ))}
+                    </span>
+                  </span>
                 </label>
               ))}
             </fieldset>
 
-            <label className={`choice-card choice-row ${photochromic ? "selected" : ""}`}>
-              <input type="checkbox" checked={photochromic} onChange={(e) => setPhotochromic(e.target.checked)} />
-              <span>Photochromic (adapts to sunlight)</span>
-              <strong>+{formatINR(LENS_PRICES[powerType]?.photochromic)}</strong>
+            <label className={`photochromic-card ${photochromic ? "is-selected" : ""}`}>
+              <input
+                className="photochromic-card-input"
+                type="checkbox"
+                checked={photochromic}
+                onChange={(e) => setPhotochromic(e.target.checked)}
+              />
+              <span className="photochromic-checkbox" aria-hidden="true"><CheckCircle2 size={15} /></span>
+              <span className="photochromic-illustration" aria-hidden="true"><LensTypeIllustration type="Photochromic" /></span>
+              <span className="photochromic-copy"><strong>Photochromic</strong><small>Adapts to sunlight</small></span>
+              <strong className="photochromic-price">+{formatINR(LENS_PRICES[powerType]?.photochromic)}</strong>
             </label>
 
             <PriceBreakdown pricing={pricing} />
