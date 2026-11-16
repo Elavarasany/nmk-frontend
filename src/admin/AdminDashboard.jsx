@@ -416,20 +416,14 @@ const EMPTY_OFFER = {
 
 // Admin preferences (stored in this browser)
 const SORT_OPTIONS = [
-  { value: "name-asc", label: "Name (A to Z)" },
-  { value: "name-desc", label: "Name (Z to A)" },
-  { value: "price-asc", label: "Price (Low to High)" },
-  { value: "price-desc", label: "Price (High to Low)" },
+  { value: "name", label: "Name" },
   { value: "recent", label: "Recently Added" },
 ];
 
 const DASHBOARD_ROW_OPTIONS = [5, 10, 25, 50];
 
 const DEFAULT_SORT_CONFIG = {
-  "name-asc": { key: "name", direction: "asc" },
-  "name-desc": { key: "name", direction: "desc" },
-  "price-asc": { key: "price", direction: "asc" },
-  "price-desc": { key: "price", direction: "desc" },
+  name: { key: "name", direction: "asc" },
   recent: { key: "recent", direction: "desc" },
 };
 
@@ -458,9 +452,10 @@ const sanitizePrefs = (raw) => {
       Number.isInteger(threshold) && threshold >= 1 && threshold <= 500
         ? threshold
         : DEFAULT_PREFS.lowStockThreshold,
-    defaultProductSort: SORT_OPTIONS.some((o) => o.value === source.defaultProductSort)
-      ? source.defaultProductSort
-      : DEFAULT_PREFS.defaultProductSort,
+    defaultProductSort:
+      source.defaultProductSort === "recent"
+        ? "recent"
+        : "name",
     dashboardRows: DASHBOARD_ROW_OPTIONS.includes(rows) ? rows : DEFAULT_PREFS.dashboardRows,
     confirmProductDelete:
       typeof source.confirmProductDelete === "boolean"
@@ -1805,8 +1800,8 @@ const [importingCsv, setImportingCsv] = useState(false);
   const [stockFilter, setStockFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sort, setSort] = useState(
-  DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG["name-asc"]
-);
+    DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name
+  );
 
   const [modal, setModal] = useState(null); // null | { mode: "add" } | { mode: "edit", id }
   const [form, setForm] = useState(EMPTY_PRODUCT);
