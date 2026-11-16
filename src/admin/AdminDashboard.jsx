@@ -429,7 +429,7 @@ const DEFAULT_SORT_CONFIG = {
 
 const DEFAULT_PREFS = {
   lowStockThreshold: 5,
-  defaultProductSort: "name-asc",
+  defaultProductSort: "name",
   dashboardRows: 5,
   confirmProductDelete: true,
 };
@@ -634,8 +634,8 @@ const sortValue = (product, key) => {
     case "category":
       return product.category ?? "";
     case "recent": {
-      const timestamp = new Date(product.createdAt || 0).getTime();
-      return Number.isNaN(timestamp) ? 0 : timestamp;
+      const timestamp = product.createdAt ? new Date(product.createdAt).getTime() : Number.NaN;
+      return Number.isFinite(timestamp) ? timestamp : null;
     }
     default:
       return getProductTitle(product);
@@ -1800,8 +1800,13 @@ const [importingCsv, setImportingCsv] = useState(false);
   const [stockFilter, setStockFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sort, setSort] = useState(
-    DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name
+    () => DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name
   );
+
+  // Apply the saved default whenever the admin preference changes.
+  useEffect(() => {
+    setSort(DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name);
+  }, [prefs.defaultProductSort]);
 
   const [modal, setModal] = useState(null); // null | { mode: "add" } | { mode: "edit", id }
   const [form, setForm] = useState(EMPTY_PRODUCT);
@@ -1832,6 +1837,22 @@ matchesTerm(productNameFilter.trim().toLowerCase(), getProductTitle(p)) &&
           (statusFilter === "ALL" || (statusFilter === "ACTIVE") === Boolean(p.active))
       )
       .sort((a, b) => {
+        if (sort.key === "recent") {
+          const aDate = sortValue(a, "recent");
+          const bDate = sortValue(b, "recent");
+
+          // Newest timestamp first; missing/invalid timestamps fall back to the
+          // database-generated ID so older records still have a stable order.
+          if (aDate !== null && bDate !== null && aDate !== bDate) {
+            return (aDate - bDate) * direction;
+          }
+          if (aDate !== null && bDate === null) return -1 * direction;
+          if (aDate === null && bDate !== null) return 1 * direction;
+
+          const idResult = Number(a.id ?? 0) - Number(b.id ?? 0);
+          return idResult * direction;
+        }
+
         const x = sortValue(a, sort.key);
         const y = sortValue(b, sort.key);
         const result =
