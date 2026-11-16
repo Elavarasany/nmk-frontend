@@ -415,21 +415,10 @@ const EMPTY_OFFER = {
 };
 
 // Admin preferences (stored in this browser)
-const SORT_OPTIONS = [
-  { value: "name", label: "Name" },
-  { value: "recent", label: "Recently Added" },
-];
-
 const DASHBOARD_ROW_OPTIONS = [5, 10, 25, 50];
-
-const DEFAULT_SORT_CONFIG = {
-  name: { key: "name", direction: "asc" },
-  recent: { key: "recent", direction: "desc" },
-};
 
 const DEFAULT_PREFS = {
   lowStockThreshold: 5,
-  defaultProductSort: "name",
   dashboardRows: 5,
   confirmProductDelete: true,
 };
@@ -452,10 +441,6 @@ const sanitizePrefs = (raw) => {
       Number.isInteger(threshold) && threshold >= 1 && threshold <= 500
         ? threshold
         : DEFAULT_PREFS.lowStockThreshold,
-    defaultProductSort:
-      source.defaultProductSort === "recent"
-        ? "recent"
-        : "name",
     dashboardRows: DASHBOARD_ROW_OPTIONS.includes(rows) ? rows : DEFAULT_PREFS.dashboardRows,
     confirmProductDelete:
       typeof source.confirmProductDelete === "boolean"
@@ -1799,14 +1784,8 @@ const [importingCsv, setImportingCsv] = useState(false);
   const [priceFilter, setPriceFilter] = useState("");
   const [stockFilter, setStockFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [sort, setSort] = useState(
-    () => DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name
-  );
-
-  // Apply the saved default whenever the admin preference changes.
-  useEffect(() => {
-    setSort(DEFAULT_SORT_CONFIG[prefs.defaultProductSort] || DEFAULT_SORT_CONFIG.name);
-  }, [prefs.defaultProductSort]);
+  // Product starts with newest first; each sortable column keeps its own sort key.
+  const [sort, setSort] = useState({ key: "recent", direction: "desc" });
 
   const [modal, setModal] = useState(null); // null | { mode: "add" } | { mode: "edit", id }
   const [form, setForm] = useState(EMPTY_PRODUCT);
@@ -2224,7 +2203,7 @@ const handleProductCsvImport = async (e) => {
           <table className="admin-table">
             <thead>
               <tr>
-                <SortableTh label="Product" sortKey="name" sort={sort} onSort={handleSort} />
+                <SortableTh label="Product" sortKey="recent" sort={sort} onSort={handleSort} />
                 <SortableTh label="Category" sortKey="category" sort={sort} onSort={handleSort} />
                 <SortableTh label="Price" sortKey="price" sort={sort} onSort={handleSort} />
                 <SortableTh label="Stock" sortKey="stock" sort={sort} onSort={handleSort} />
@@ -4811,19 +4790,6 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
             />
           </FormGroup>
 
-          <FormGroup id="set-sort" label="Default product sort">
-            <select
-              id="set-sort"
-              value={draft.defaultProductSort}
-              onChange={(e) => updateDraft("defaultProductSort", e.target.value)}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </FormGroup>
         </div>
       </div>
 
