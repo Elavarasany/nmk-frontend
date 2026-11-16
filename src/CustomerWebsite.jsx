@@ -1999,9 +1999,14 @@ function OfferBar({ offer }) {
   );
 }
 
-function MarketingBanners({ banners }) {
+function MarketingBanners({ banners, placement }) {
   const visible = banners
-    .filter((b) => b.active !== false && b.imageUrl && BANNER_PLACEMENTS.includes((b.placement || "").toUpperCase()))
+    .filter(
+      (b) =>
+        b.active !== false &&
+        b.imageUrl &&
+        (b.placement || "").toUpperCase() === placement
+    )
     .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0));
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -3202,9 +3207,11 @@ const cartTotal = cart.reduce(
               decoding="async"
             />
           </div>
+
+          <MarketingBanners banners={marketingBanners} placement="HOME_HERO" />
         </section>
 
-        <MarketingBanners banners={marketingBanners} />
+        <MarketingBanners banners={marketingBanners} placement="HOME" />
 
         {/* CATEGORIES */}
         <section className="category-section section" id="categories" aria-labelledby="categories-heading">
