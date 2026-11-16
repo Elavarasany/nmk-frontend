@@ -455,6 +455,10 @@ body {
   object-fit: cover;
 }
 
+.website .hero > .marketing-banners {
+  grid-column: 1 / -1;
+}
+
 /* =========================
    MARKETING BANNERS
 ========================= */
