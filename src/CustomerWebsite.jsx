@@ -2003,24 +2003,67 @@ function MarketingBanners({ banners }) {
   const visible = banners
     .filter((b) => b.active !== false && b.imageUrl && BANNER_PLACEMENTS.includes((b.placement || "").toUpperCase()))
     .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0));
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex((current) => (visible.length ? current % visible.length : 0));
+  }, [visible.length]);
+
+  useEffect(() => {
+    if (visible.length <= 1) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % visible.length);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [visible.length]);
 
   if (visible.length === 0) return null;
 
-  return (
-    <section className="marketing-banners" aria-label="Promotions">
-      {visible.map((banner) => {
-        const href = safeHref(banner.targetUrl);
-        const picture = <img src={banner.imageUrl} alt={banner.title} loading="lazy" />;
+  const moveTo = (index) => setActiveIndex((index + visible.length) % visible.length);
 
-        // A banner without a destination is just a picture, not a link that jumps to the top
-        return href ? (
-          <a key={banner.id} href={href}>
-            {picture}
-          </a>
-        ) : (
-          <div key={banner.id}>{picture}</div>
-        );
-      })}
+  return (
+    <section className="marketing-banners" aria-label="Promotions" aria-roledescription="carousel">
+      <div className="marketing-banner-track">
+        {visible.map((banner, index) => {
+          const active = index === activeIndex;
+          const href = safeHref(banner.targetUrl);
+          const picture = <img src={banner.imageUrl} alt={banner.title || "NMK Opticals promotion"} loading={index === 0 ? "eager" : "lazy"} />;
+          const slideContent = href ? (
+            <a href={href} tabIndex={active ? 0 : -1}>{picture}</a>
+          ) : (
+            <div>{picture}</div>
+          );
+
+          return (
+            <div
+              key={banner.id}
+              className={`marketing-banner-slide${active ? " is-active" : ""}`}
+              aria-hidden={!active}
+            >
+              {slideContent}
+            </div>
+          );
+        })}
+      </div>
+
+      {visible.length > 1 && (
+        <>
+          <button className="marketing-banner-arrow is-prev" type="button" aria-label="Previous promotion" onClick={() => moveTo(activeIndex - 1)}>‹</button>
+          <button className="marketing-banner-arrow is-next" type="button" aria-label="Next promotion" onClick={() => moveTo(activeIndex + 1)}>›</button>
+          <div className="marketing-banner-dots" aria-label="Choose promotion">
+            {visible.map((banner, index) => (
+              <button
+                key={banner.id}
+                type="button"
+                className={index === activeIndex ? "is-active" : ""}
+                aria-label={`Show promotion ${index + 1}`}
+                aria-current={index === activeIndex ? "true" : undefined}
+                onClick={() => moveTo(index)}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }

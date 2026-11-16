@@ -459,28 +459,41 @@ body {
    MARKETING BANNERS
 ========================= */
 
-
-/* =========================
-   MARKETING BANNERS
-========================= */
-
 .website .marketing-banners {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  position: relative;
   width: 100%;
-  padding: 0;
   margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.website .marketing-banners a,
-.website .marketing-banners > div {
+.website .marketing-banner-track {
+  position: relative;
+  width: 100%;
+}
+
+.website .marketing-banner-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 550ms ease;
+}
+
+.website .marketing-banner-slide.is-active {
+  position: relative;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.website .marketing-banner-slide a,
+.website .marketing-banner-slide > div {
   display: block;
   width: 100%;
   line-height: 0;
 }
 
-.website .marketing-banners img {
+.website .marketing-banner-slide img {
   display: block;
   width: 100%;
   height: auto;
@@ -488,6 +501,65 @@ body {
   object-fit: cover;
 }
 
+.website .marketing-banner-arrow {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  color: #0b1f3a;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+}
+
+.website .marketing-banner-arrow.is-prev {
+  left: 18px;
+}
+
+.website .marketing-banner-arrow.is-next {
+  right: 18px;
+}
+
+.website .marketing-banner-dots {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.website .marketing-banner-dots button {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: rgba(11, 31, 58, 0.35);
+  cursor: pointer;
+}
+
+.website .marketing-banner-dots button.is-active {
+  width: 22px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .website .marketing-banner-slide {
+    transition: none;
+  }
+}
 
 /* =========================
    SHARED SECTIONS
