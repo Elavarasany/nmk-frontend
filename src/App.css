@@ -459,23 +459,35 @@ body {
    MARKETING BANNERS
 ========================= */
 
+
+/* =========================
+   MARKETING BANNERS
+========================= */
+
 .website .marketing-banners {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-  padding: 30px 5%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  margin: 0;
 }
 
-.website .marketing-banners a {
+.website .marketing-banners a,
+.website .marketing-banners > div {
   display: block;
+  width: 100%;
+  line-height: 0;
 }
 
 .website .marketing-banners img {
+  display: block;
   width: 100%;
   height: auto;
-  border-radius: 10px;
+  border-radius: 0;
   object-fit: cover;
 }
+
 
 /* =========================
    SHARED SECTIONS
