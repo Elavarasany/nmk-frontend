@@ -1846,8 +1846,8 @@ matchesTerm(productNameFilter.trim().toLowerCase(), getProductTitle(p)) &&
           if (aDate !== null && bDate !== null && aDate !== bDate) {
             return (aDate - bDate) * direction;
           }
-          if (aDate !== null && bDate === null) return -1 * direction;
-          if (aDate === null && bDate !== null) return 1 * direction;
+          if (aDate !== null && bDate === null) return 1 * direction;
+          if (aDate === null && bDate !== null) return -1 * direction;
 
           const idResult = Number(a.id ?? 0) - Number(b.id ?? 0);
           return idResult * direction;
