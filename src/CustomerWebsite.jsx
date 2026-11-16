@@ -141,7 +141,6 @@ const TIME_SLOTS = {
   "3 PM - 6 PM": "15:00:00",
 };
 
-const BANNER_PLACEMENTS = ["HOME", "HOME_HERO"];
 const EMPTY_BOOKING = { name: "", phone: "", email: "", date: "", slot: "" };
 
 const FALLBACK_IMAGES = {
