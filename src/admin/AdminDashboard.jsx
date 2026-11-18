@@ -590,6 +590,7 @@ const buildProductPayload = (data) => {
 
   return {
     // The API still stores a name, so it is filled from the brand (not typed by the admin)
+    version: data.version ?? null,
     name: String(specifications.brand || specifications.productType || data.name || data.category || "").trim(),
     gender,
     category: (data.category || "").trim(),
@@ -1864,6 +1865,7 @@ matchesTerm(productNameFilter.trim().toLowerCase(), getProductTitle(p)) &&
 
   const openEdit = (product) => {
     setForm({
+      version: product.version,
       name: product.name ?? "",
       gender: product.gender ?? product.specifications?.gender ?? "",
       category: product.category ?? "",
@@ -2027,6 +2029,7 @@ const handleProductCsvImport = async (e) => {
         const activeCell = cell("active").toLowerCase();
 
         const product = {
+          version: existingProduct?.version ?? null,
           name: pick("name", existingProduct?.name),
           gender: pick("gender", existingProduct?.gender),
           category,
