@@ -5,6 +5,9 @@
 The cashier terminal is available at `/admin/pos` after an admin signs in.
 
 - Select an active inventory location.
+- Create sellable product variants with SKU, optional barcode, attributes and optional price override.
+- Receive stock against a selected variant/location with an idempotency key and audit reason.
+- View on-hand, reserved and available stock by variant.
 - Search the server catalogue by product name, category, SKU or barcode.
 - Select the exact sellable variant and add it to the bill.
 - See current location stock and prevent adding more than the displayed available quantity.
