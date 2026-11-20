@@ -3126,6 +3126,11 @@ const cartTotal = cart.reduce(
       return;
     }
 
+    if (cart.some((item) => !Number.isInteger(Number(item.variantId)) || Number(item.variantId) <= 0)) {
+      setCheckoutError("Your cart is still being refreshed. Please wait a moment and try again.");
+      return;
+    }
+
     setPaymentLoading(true);
 
     try {
@@ -3258,6 +3263,7 @@ const cartTotal = cart.reduce(
     <div className="checkout-summary-item" key={cartLineKey(item)}>
       <span>
         <strong>{item.name}</strong>
+        {item.variantName && <small className="checkout-variant-name">{item.variantName}</small>}
         {item.quantity > 1 && ` × ${item.quantity}`}
         {item.lens && <LensSummary lens={item.lens} />}
       </span>
