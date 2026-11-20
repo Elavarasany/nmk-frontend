@@ -106,6 +106,199 @@ function ReceiptView({ sale, onClose }) {
   );
 }
 
+
+function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onError }) {
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [variants, setVariants] = useState([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [variantSaving, setVariantSaving] = useState(false);
+  const [variantForm, setVariantForm] = useState({
+    sku: "", barcode: "", variantName: "", attributes: '{"color":"Black","size":"Medium"}', sellingPriceOverride: ""
+  });
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [reason, setReason] = useState("Supplier stock receipt");
+  const [receiptSaving, setReceiptSaving] = useState(false);
+  const [receiptRetry, setReceiptRetry] = useState(false);
+  const receiptPayload = useRef(null);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const data = await apiRequest("/admin/products");
+      const list = Array.isArray(data) ? data.filter((product) => product.active !== false) : [];
+      setProducts(list);
+      setSelectedProductId((current) => current && list.some((p) => String(p.id) === String(current))
+        ? current : (list[0]?.id ? String(list[0].id) : ""));
+    } catch (err) { onError(err.message); }
+    finally { setProductsLoading(false); }
+  }, [onError]);
+
+  const loadVariants = useCallback(async (productId) => {
+    if (!productId) { setVariants([]); return; }
+    setVariantsLoading(true);
+    try {
+      const data = await apiRequest(`/admin/products/${productId}/variants`);
+      const list = Array.isArray(data) ? data : [];
+      setVariants(list);
+      setSelectedVariantId((current) => current && list.some((v) => String(v.id) === String(current) && v.active)
+        ? current : (list.find((v) => v.active)?.id ? String(list.find((v) => v.active).id) : ""));
+    } catch (err) { onError(err.message); }
+    finally { setVariantsLoading(false); }
+  }, [onError]);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+  useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
+
+  const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
+
+  const createVariant = async (event) => {
+    event.preventDefault();
+    onError("");
+    if (!selectedProductId) { onError("Choose a product before creating a variant."); return; }
+    let attributes;
+    try {
+      attributes = variantForm.attributes.trim() ? JSON.parse(variantForm.attributes) : {};
+      if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
+        throw new Error("Attributes must be a JSON object.");
+      }
+    } catch (err) { onError(err.message || "Enter valid JSON attributes."); return; }
+    const body = {
+      sku: variantForm.sku.trim(),
+      barcode: variantForm.barcode.trim() || null,
+      variantName: variantForm.variantName.trim(),
+      attributes,
+      ...(variantForm.sellingPriceOverride.trim()
+        ? { sellingPriceOverride: Number(variantForm.sellingPriceOverride) } : {}),
+    };
+    setVariantSaving(true);
+    try {
+      const created = await apiRequest(`/admin/products/${selectedProductId}/variants`, {
+        method: "POST", body: JSON.stringify(body)
+      });
+      setVariantForm({ sku: "", barcode: "", variantName: "", attributes: '{"color":"Black","size":"Medium"}', sellingPriceOverride: "" });
+      await loadVariants(selectedProductId);
+      if (created?.id) setSelectedVariantId(String(created.id));
+      await onRefreshCatalog();
+      onNotice(`Variant ${created?.sku || body.sku} created.`);
+    } catch (err) { onError(err.message); }
+    finally { setVariantSaving(false); }
+  };
+
+  const receiveStock = async (event) => {
+    event.preventDefault();
+    onError("");
+    if (!locationId) { onError("Choose an active inventory location."); return; }
+    if (!selectedVariantId) { onError("Create or select an active variant first."); return; }
+    if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0) {
+      onError("Stock quantity must be a positive whole number."); return;
+    }
+    if (!reason.trim()) { onError("A stock receipt reason is required."); return; }
+
+    if (!receiptPayload.current) {
+      receiptPayload.current = {
+        locationId: Number(locationId),
+        variantId: Number(selectedVariantId),
+        quantity: Number(quantity),
+        idempotencyKey: newIdempotencyKey(),
+        reason: reason.trim(),
+      };
+    }
+    setReceiptSaving(true);
+    try {
+      const result = await apiRequest("/admin/inventory/receive", {
+        method: "POST", body: JSON.stringify(receiptPayload.current)
+      });
+      receiptPayload.current = null;
+      setReceiptRetry(false);
+      setQuantity("1");
+      await onRefreshCatalog();
+      onNotice(`Stock received. Available quantity is now ${result.availableQuantity}.`);
+    } catch (err) {
+      if (!err.status || err.status >= 500 || err.status === 409) {
+        setReceiptRetry(true);
+        onError(`${err.message} Retry this exact receipt to safely reuse its idempotency key.`);
+      } else {
+        receiptPayload.current = null;
+        setReceiptRetry(false);
+        onError(err.message);
+      }
+    } finally { setReceiptSaving(false); }
+  };
+
+  const selectedProduct = products.find((product) => String(product.id) === String(selectedProductId));
+  const stockRows = catalog.find((product) => String(product.productId) === String(selectedProductId))?.variants || [];
+
+  return (
+    <section className="pos-inventory-workspace">
+      <div className="pos-inventory-intro">
+        <div><span className="pos-eyebrow">CATALOGUE & STOCK CONTROL</span><h2>Inventory setup</h2><p>Create sellable variants and receive physical stock into the selected store location.</p></div>
+        <button type="button" className="pos-button secondary compact" onClick={() => { loadProducts(); onRefreshCatalog(); }} disabled={productsLoading || variantsLoading}><RefreshCw size={15} /> Refresh inventory</button>
+      </div>
+      <div className="pos-inventory-grid">
+        <section className="pos-inventory-card">
+          <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Create product variant</h3><p>Each sellable colour/size combination needs its own SKU.</p></div></div>
+          <form onSubmit={createVariant} className="pos-inventory-form">
+            <label>Product
+              <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} disabled={productsLoading || receiptRetry} required>
+                {products.length ? products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>) : <option value="">No active products</option>}
+              </select>
+            </label>
+            <div className="pos-inventory-fields">
+              <label>Variant name<input value={variantForm.variantName} onChange={(e) => updateVariantForm("variantName", e.target.value)} placeholder="Black - Medium" maxLength={255} required /></label>
+              <label>SKU<input value={variantForm.sku} onChange={(e) => updateVariantForm("sku", e.target.value)} placeholder="FRAME-BLK-M" maxLength={100} required /></label>
+              <label>Barcode (optional)<input value={variantForm.barcode} onChange={(e) => updateVariantForm("barcode", e.target.value)} placeholder="Scan or enter barcode" maxLength={100} /></label>
+              <label>Selling price override (₹)<input type="number" min="0.01" step="0.01" value={variantForm.sellingPriceOverride} onChange={(e) => updateVariantForm("sellingPriceOverride", e.target.value)} placeholder={selectedProduct?.price ? `Default ${money(selectedProduct.price)}` : "Use product price"} /></label>
+            </div>
+            <label>Variant attributes (JSON)
+              <textarea value={variantForm.attributes} onChange={(e) => updateVariantForm("attributes", e.target.value)} rows={3} placeholder='{"color":"Black","size":"Medium"}' spellCheck="false" />
+              <small>Example: {"{\"color\":\"Black\",\"size\":\"Medium\"}"}. Attributes are saved with the SKU.</small>
+            </label>
+            <button type="submit" className="pos-button primary" disabled={variantSaving || productsLoading || !selectedProductId}>
+              {variantSaving ? <><RefreshCw className="pos-spin" size={15} /> Creating…</> : <><Plus size={16} /> Create variant</>}
+            </button>
+          </form>
+        </section>
+
+        <section className="pos-inventory-card">
+          <div className="pos-inventory-card-heading"><Store size={18} /><div><h3>Receive stock</h3><p>Record supplier receipts against a specific SKU and location.</p></div></div>
+          <form onSubmit={receiveStock} className="pos-inventory-form">
+            <label>Product
+              <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} disabled={productsLoading || receiptRetry} required>
+                {products.length ? products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>) : <option value="">No active products</option>}
+              </select>
+            </label>
+            <label>Active variant / SKU
+              <select value={selectedVariantId} onChange={(e) => setSelectedVariantId(e.target.value)} disabled={variantsLoading || receiptRetry || !variants.some((v) => v.active)} required>
+                {variants.filter((v) => v.active).length
+                  ? variants.filter((v) => v.active).map((variant) => <option key={variant.id} value={variant.id}>{variant.variantName} · {variant.sku}</option>)
+                  : <option value="">Create an active variant first</option>}
+              </select>
+            </label>
+            <div className="pos-inventory-fields">
+              <label>Quantity received<input type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} disabled={receiptRetry} required /></label>
+              <label>Reason<input value={reason} onChange={(e) => setReason(e.target.value)} disabled={receiptRetry} maxLength={500} required /></label>
+            </div>
+            {receiptRetry && <p className="pos-retry-note">A previous receipt response was uncertain. Retry without changing the product, quantity or reason.</p>}
+            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId}>
+              {receiptSaving ? <><RefreshCw className="pos-spin" size={15} /> Receiving…</> : receiptRetry ? <><RefreshCw size={15} /> Retry same receipt</> : <><Plus size={16} /> Receive stock</>}
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <section className="pos-inventory-card pos-stock-card">
+        <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Current stock by variant</h3><p>{selectedProduct?.name || "Select a product"} · {stockRows.length} active variants at this location</p></div></div>
+        {variantsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading variants…</span></div>
+          : stockRows.length === 0 ? <div className="pos-empty-state"><Package /><strong>No stockable variants yet</strong><span>Create a variant and receive stock to make this product available in POS.</span></div>
+          : <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Variant</th><th>SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Price</th></tr></thead><tbody>{stockRows.map((variant) => <tr key={variant.variantId}><td><strong>{variant.variantName}</strong></td><td>{variant.sku}</td><td>{variant.onHandQuantity}</td><td>{variant.reservedQuantity}</td><td><strong>{variant.availableQuantity}</strong></td><td>{money(variant.sellingPrice)}</td></tr>)}</tbody></table></div>}
+      </section>
+    </section>
+  );
+}
+
 export default function PosTerminal() {
   const navigate = useNavigate();
   const [locations, setLocations] = useState([]);
