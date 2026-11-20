@@ -1,0 +1,47 @@
+# NMK Opticals POS Terminal — v1
+
+## Included
+
+The cashier terminal is available at `/admin/pos` after an admin signs in.
+
+- Select an active inventory location.
+- Search the server catalogue by product name, category, SKU or barcode.
+- Select the exact sellable variant and add it to the bill.
+- See current location stock and prevent adding more than the displayed available quantity.
+- Capture optional walk-in customer name and phone.
+- Apply a direct rupee discount.
+- Accept cash, UPI or card, including split tender across up to three methods.
+- Calculate cash change.
+- Submit the sale through the authenticated POS checkout API.
+- View paginated sales history, inspect a transaction and print/reprint an invoice.
+- Retry uncertain checkout requests with the same idempotency key and unchanged payload to reduce duplicate-sale risk.
+
+## Backend contract
+
+The terminal uses the existing backend endpoints:
+
+- `GET /api/admin/pos/locations`
+- `GET /api/admin/pos/catalog?locationId={id}`
+- `POST /api/admin/pos/checkout`
+- `GET /api/admin/pos/sales?page={page}&size=20&locationId={id}`
+- `GET /api/admin/pos/sales/{saleId}`
+
+Prices, variant ownership, payment totals and stock deductions are validated by the backend. The browser does not submit a trusted price or stock count. A successful checkout records the sale, item/payment snapshots and stock movements in the backend transaction.
+
+Stock receipts are handled separately through the authenticated inventory receipt endpoint; a cashier sale must never be used to create opening stock.
+
+## Deliberate v1 exclusions
+
+This terminal does not claim to implement the complete retail operations suite. These features remain separate work:
+
+- Cash registers, cashier shifts, opening floats, cash-in/out and shift closing/reconciliation.
+- Returns, exchanges, refunds, voids and credit notes.
+- GST/tax calculation and accountant-approved invoice numbering/wording.
+- Supplier purchasing, goods receipt, purchase returns and stock counts.
+- Fine-grained OWNER/MANAGER/CASHIER role and approval matrix.
+
+These require approved shop/accounting policies and additive schema migrations. Completed sales must not be edited or deleted to simulate a return or refund.
+
+## Deployment gate
+
+No live/client database migration is performed by the frontend terminal. Before production POS use, the backend's manual variant/inventory/POS migrations must be reviewed, tested on a restorable staging copy, and explicitly approved for the client database. Configure the production API URL and CORS allowlist separately; do not deploy the local development API URL.
