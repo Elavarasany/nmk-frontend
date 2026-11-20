@@ -4630,3 +4630,10 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
+
+.website .checkout-variant-name {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
