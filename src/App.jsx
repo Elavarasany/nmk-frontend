@@ -12,6 +12,7 @@ import CustomerWebsite from "./CustomerWebsite";
 // Admin pages load on demand.
 const AdminLogin = lazy(() => import("./admin/AdminLogin"));
 const AdminDashboard = lazy(() => import("./admin/AdminDashboard"));
+const PosTerminal = lazy(() => import("./pos/PosTerminal"));
 
 const TOKEN_KEY = "adminToken";
 const LOGIN_PATH = "/admin";
@@ -86,6 +87,16 @@ export default function App() {
             element={
               <ProtectedAdminRoute>
                 <AdminDashboard />
+              </ProtectedAdminRoute>
+            }
+          />
+
+          {/* Protected in-store POS terminal */}
+          <Route
+            path="/admin/pos"
+            element={
+              <ProtectedAdminRoute>
+                <PosTerminal />
               </ProtectedAdminRoute>
             }
           />
