@@ -30,7 +30,9 @@ async function apiRequest(path, options = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (response.status === 401 || response.status === 403) {
-    throw new Error("Your admin session is invalid or expired. Sign in again.");
+    const error = new Error("Your admin session is invalid or expired. Sign in again.");
+    error.status = response.status;
+    throw error;
   }
   if (!response.ok) {
     const error = new Error(data?.message || data?.error || `Request failed (${response.status})`);
