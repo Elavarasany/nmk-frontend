@@ -192,7 +192,7 @@ export default function PosTerminal() {
   }, [catalog, category, search]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const discountValue = Math.max(0, Number(discount) || 0);
+  const discountValue = Math.max(0, Number((Number(discount) || 0).toFixed(2)));
   const grandTotal = Math.max(0, subtotal - discountValue);
   const paymentTotal = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
   const cashChange = payments.filter((p) => p.paymentMethod === "CASH")
@@ -378,7 +378,16 @@ export default function PosTerminal() {
                 <div><h2>Product catalogue</h2><p>{catalog.length} products available at this store</p></div>
                 <button type="button" className="pos-icon-button" onClick={loadCatalog} disabled={catalogLoading} aria-label="Refresh catalogue"><RefreshCw size={17} className={catalogLoading ? "pos-spin" : ""} /></button>
               </div>
-              <div className="pos-search-wrap"><Search size={18} /><input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search product, SKU or barcode…" aria-label="Search products" /><ScanLine size={17} className="pos-search-hint" /></div>
+              <div className="pos-search-wrap"><Search size={18} /><input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(event) => {
+                  if (event.key !== "Enter" || !search.trim()) return;
+                  const term = search.trim().toLowerCase();
+                  const match = catalog.flatMap((product) => (product.variants || []).map((variant) => ({ product, variant })))
+                    .find(({ variant }) => [variant.barcode, variant.sku].some((value) => value && String(value).toLowerCase() === term));
+                  if (match && match.variant.availableQuantity > 0) {
+                    addToCart(match.product, match.variant);
+                    setSearch("");
+                  }
+                }} placeholder="Search product, SKU or barcode…" aria-label="Search products or scan barcode" /><ScanLine size={17} className="pos-search-hint" /></div>
               <div className="pos-category-list">
                 {categories.map((item) => <button key={item} type="button" className={category === item ? "selected" : ""} onClick={() => setCategory(item)}>{item}</button>)}
               </div>
