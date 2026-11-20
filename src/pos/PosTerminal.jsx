@@ -14,15 +14,15 @@ const money = (value) => Number(value || 0).toLocaleString("en-IN", {
 });
 const amount = (value) => Number(value || 0).toFixed(2);
 const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.() ||
-  \`pos-\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
+  `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 async function apiRequest(path, options = {}) {
   const token = sessionStorage.getItem("adminToken");
-  const response = await fetch(\`\${API_BASE}\${path}\`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: \`Bearer \${token}\` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -33,7 +33,7 @@ async function apiRequest(path, options = {}) {
     throw new Error("Your admin session is invalid or expired. Sign in again.");
   }
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || \`Request failed (\${response.status})\`);
+    throw new Error(data?.message || data?.error || `Request failed (${response.status})`);
   }
   return data;
 }
@@ -71,7 +71,7 @@ function ReceiptView({ sale, onClose }) {
           <table className="pos-receipt-table">
             <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
             <tbody>{(sale.items || []).map((item, index) => (
-              <tr key={\`\${item.variantId}-\${index}\`}>
+              <tr key={`${item.variantId}-${index}`}>
                 <td><strong>{item.productName}</strong><small>{item.variantName || item.sku}</small></td>
                 <td>{item.quantity}</td><td>{money(item.unitPrice)}</td><td>{money(item.lineTotal)}</td>
               </tr>
@@ -88,7 +88,7 @@ function ReceiptView({ sale, onClose }) {
               <div key={index}><span>{payment.paymentMethod}</span><span>{money(payment.amount)}</span></div>
             ))}
             {(sale.payments || []).filter((p) => p.paymentMethod === "CASH" && Number(p.changeAmount) > 0)
-              .map((p, index) => <div key={\`change-\${index}\`}><span>Change</span><span>{money(p.changeAmount)}</span></div>)}
+              .map((p, index) => <div key={`change-${index}`}><span>Change</span><span>{money(p.changeAmount)}</span></div>)}
           </div>
           <p className="pos-receipt-thanks">Thank you for shopping with NMK Opticals.</p>
           <p className="pos-receipt-footnote">Computer-generated invoice · Please retain for your records</p>
@@ -151,7 +151,7 @@ export default function PosTerminal() {
     setCatalogLoading(true);
     setError("");
     try {
-      const data = await apiRequest(\`/admin/pos/catalog?locationId=\${encodeURIComponent(locationId)}\`);
+      const data = await apiRequest(`/admin/pos/catalog?locationId=${encodeURIComponent(locationId)}`);
       setCatalog(Array.isArray(data?.products) ? data.products : []);
       setSelectedVariants({});
     } catch (err) { setError(err.message); }
@@ -162,7 +162,7 @@ export default function PosTerminal() {
     setHistoryLoading(true);
     setError("");
     try {
-      const data = await apiRequest(\`/admin/pos/sales?page=\${page}&size=20\${locationId ? \`&locationId=\${encodeURIComponent(locationId)}\` : ""}\`);
+      const data = await apiRequest(`/admin/pos/sales?page=${page}&size=20${locationId ? `&locationId=${encodeURIComponent(locationId)}` : ""}`);
       setHistory(Array.isArray(data?.content) ? data.content : []);
       setHistoryPage(Number(data?.number || 0));
       setHistoryPages(Number(data?.totalPages || 0));
@@ -227,7 +227,7 @@ export default function PosTerminal() {
         availableQuantity: variant.availableQuantity,
       }];
     });
-    setNotice(\`\${product.name} added to cart\`);
+    setNotice(`${product.name} added to cart`);
   };
 
   const changeQuantity = (variantId, delta) => {
@@ -308,14 +308,21 @@ export default function PosTerminal() {
       await loadCatalog();
       setNotice("Sale completed. Stock has been updated.");
     } catch (err) {
-      setError(\`\${err.message} Your cart is preserved. If this was a network timeout, retry without changing the sale so the same request key can safely retrieve the result.\`);
+      if (!err.status || err.status >= 500 || err.status === 409) {
+        setRetryPending(true);
+      } else {
+        pendingKey.current = null;
+        setPendingPayload(null);
+        setRetryPending(false);
+      }
+      setError(`${err.message} Your cart is preserved.${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same checkout; the same request key will be reused to prevent a duplicate sale." : " Correct the details and submit again."}`);
     } finally { setCheckoutLoading(false); }
   };
 
   const openHistorySale = async (sale) => {
     setSelectedHistorySale(sale);
     try {
-      const full = await apiRequest(\`/admin/pos/sales/\${sale.id}\`);
+      const full = await apiRequest(`/admin/pos/sales/${sale.id}`);
       setSelectedHistorySale(full);
     } catch (err) { setError(err.message); }
   };
@@ -352,8 +359,8 @@ export default function PosTerminal() {
         <div className="pos-heading-row">
           <div><span className="pos-eyebrow">STORE OPERATIONS</span><h1>Sales terminal</h1><p>Scan or search products, build the bill, collect payment and print the invoice.</p></div>
           <div className="pos-heading-actions">
-            <button type="button" className={\`pos-tab-button \${activeTab === "checkout" ? "active" : ""}\`} onClick={() => setActiveTab("checkout")}><ShoppingCart size={17} /> New sale</button>
-            <button type="button" className={\`pos-tab-button \${activeTab === "history" ? "active" : ""}\`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>
+            <button type="button" className={`pos-tab-button ${activeTab === "checkout" ? "active" : ""}`} onClick={() => setActiveTab("checkout")}><ShoppingCart size={17} /> New sale</button>
+            <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>
           </div>
         </div>
 
@@ -381,7 +388,7 @@ export default function PosTerminal() {
                     const variant = variants.find((v) => v.variantId === selectedId) || variants[0];
                     const cartQty = cart.find((item) => item.variantId === variant?.variantId)?.quantity || 0;
                     return <article className="pos-product-card" key={product.productId}>
-                      <div className="pos-product-image"><ProductImage src={product.imageUrl} name={product.name} /><span className={variant?.availableQuantity > 0 ? "in-stock" : "out-stock"}>{variant?.availableQuantity > 0 ? \`\${variant.availableQuantity} available\` : "Out of stock"}</span></div>
+                      <div className="pos-product-image"><ProductImage src={product.imageUrl} name={product.name} /><span className={variant?.availableQuantity > 0 ? "in-stock" : "out-stock"}>{variant?.availableQuantity > 0 ? `${variant.availableQuantity} available` : "Out of stock"}</span></div>
                       <div className="pos-product-info">
                         <span className="pos-product-category">{product.category || "Product"} · {product.gender || "Unisex"}</span>
                         <h3>{product.name}</h3>
@@ -390,7 +397,7 @@ export default function PosTerminal() {
                             {variants.map((v) => <option key={v.variantId} value={v.variantId}>{v.variantName || v.sku} · {v.sku}</option>)}
                           </select>
                         </label>
-                        {variant && <div className="pos-product-bottom"><strong>{money(variant.sellingPrice)}</strong><button type="button" className="pos-add-button" disabled={retryPending || variant.availableQuantity <= cartQty} onClick={() => addToCart(product, variant)}><Plus size={16} /> {cartQty ? \`Add more (\${cartQty})\` : "Add"}</button></div>}
+                        {variant && <div className="pos-product-bottom"><strong>{money(variant.sellingPrice)}</strong><button type="button" className="pos-add-button" disabled={retryPending || variant.availableQuantity <= cartQty} onClick={() => addToCart(product, variant)}><Plus size={16} /> {cartQty ? `Add more (${cartQty})` : "Add"}</button></div>}
                       </div>
                     </article>;
                   })}
@@ -404,7 +411,7 @@ export default function PosTerminal() {
               </div>
               {cart.length === 0 ? <div className="pos-cart-empty"><ShoppingCart size={34} /><strong>Your bill is empty</strong><span>Select a product and variant to add it here.</span></div> :
                 <div className="pos-cart-items">{cart.map((item) => <div className="pos-cart-item" key={item.variantId}>
-                  <div className="pos-cart-item-main"><div><strong>{item.productName}</strong><span>{item.variantName || item.sku}</span><small>{item.sku}</small></div><button type="button" className="pos-remove-button" onClick={() => removeFromCart(item.variantId)} disabled={retryPending} aria-label={\`Remove \${item.productName}\`}><Trash2 size={16} /></button></div>
+                  <div className="pos-cart-item-main"><div><strong>{item.productName}</strong><span>{item.variantName || item.sku}</span><small>{item.sku}</small></div><button type="button" className="pos-remove-button" onClick={() => removeFromCart(item.variantId)} disabled={retryPending} aria-label={`Remove ${item.productName}`}><Trash2 size={16} /></button></div>
                   <div className="pos-cart-item-bottom"><div className="pos-quantity-control"><button type="button" onClick={() => changeQuantity(item.variantId, -1)} disabled={retryPending || item.quantity <= 1} aria-label="Decrease quantity"><Minus size={14} /></button><span>{item.quantity}</span><button type="button" onClick={() => changeQuantity(item.variantId, 1)} disabled={retryPending || item.quantity >= item.availableQuantity} aria-label="Increase quantity"><Plus size={14} /></button></div><strong>{money(item.unitPrice * item.quantity)}</strong></div>
                 </div>)}</div>}
 
