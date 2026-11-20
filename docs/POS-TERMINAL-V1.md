@@ -44,4 +44,4 @@ These require approved shop/accounting policies and additive schema migrations. 
 
 ## Deployment gate
 
-No live/client database migration is performed by the frontend terminal. Before production POS use, the backend's manual variant/inventory/POS migrations must be reviewed, tested on a restorable staging copy, and explicitly approved for the client database. Configure the production API URL and CORS allowlist separately; do not deploy the local development API URL.
+No live/client database migration is performed by the frontend terminal. Before production POS use, the backend's manual variant/inventory/POS migrations must be reviewed, tested on a restorable staging copy, and explicitly approved for the client database. Set `VITE_API_BASE_URL` consistently for the storefront, admin login/dashboard and POS terminal. The default is `http://localhost:8080/api`; for the isolated local E2E backend use `http://localhost:8082/api`. Configure the production API URL and backend CORS allowlist separately; do not deploy the local development API URL.
