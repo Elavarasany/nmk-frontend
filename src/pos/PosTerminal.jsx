@@ -161,6 +161,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setStockCount(data);
       setStockCountDrafts({});
       setStockCountReason("");
+      await onRefreshCatalog();
       onNotice("Physical stock count started. Stock movements are frozen until it is posted or cancelled.");
     } catch (err) {
       onError(err.message);
@@ -227,6 +228,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST" });
       setStockCount(null);
       setStockCountDrafts({});
+      await onRefreshCatalog();
       onNotice("Stock count cancelled. Inventory operations are available again.");
     } catch (err) { onError(err.message); }
     finally { setStockCountSaving(false); }
