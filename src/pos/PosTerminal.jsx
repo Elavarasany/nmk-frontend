@@ -416,7 +416,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                           onChange={(event) => setStockCountDrafts((current) => ({ ...current, [line.id]: event.target.value }))} disabled={stockCountSaving} />
                       : line.countedQuantity}</td>
                     <td>{line.variance == null ? "—" : <strong className={line.variance === 0 ? "" : line.variance > 0 ? "pos-count-positive" : "pos-count-negative"}>{line.variance > 0 ? "+" : ""}{line.variance}</strong>}</td>
-                    <td>{stockCount.status === "COUNTING" && <button type="button" className="pos-button secondary compact" onClick={() => saveStockCountLine(line)} disabled={stockCountSaving || stockCountDrafts[line.id] == null && line.countedQuantity != null}>Save</button>}</td>
+                    <td>{stockCount.status === "COUNTING" && <button type="button" className="pos-button secondary compact" onClick={() => saveStockCountLine(line)} disabled={stockCountSaving || stockCountDrafts[line.id] == null}>Save</button>}</td>
                   </tr>)}</tbody>
                 </table>
               </div>
