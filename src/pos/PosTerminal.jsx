@@ -1014,7 +1014,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-  const staffRole = sessionStorage.getItem("adminRole") || "ADMIN";
+  const staffRole = sessionStorage.getItem("adminRole") || "CASHIER";
   const canManageInventory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const canApplyDiscount = staffRole === "ADMIN" || staffRole === "MANAGER";
