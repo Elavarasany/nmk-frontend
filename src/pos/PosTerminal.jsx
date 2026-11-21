@@ -162,8 +162,10 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setStockCountDrafts({});
       setStockCountReason("");
       onNotice("Physical stock count started. Stock movements are frozen until it is posted or cancelled.");
-    } catch (err) { onError(err.message); }
-    finally { setStockCountSaving(false); }
+    } catch (err) {
+      onError(err.message);
+      await loadStockCount();
+    } finally { setStockCountSaving(false); }
   };
 
   const saveStockCountLine = async (line) => {
@@ -395,7 +397,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         {stockCountLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Checking active stock count…</span></div>
           : !stockCount ? (
             <div className="pos-stock-count-start">
-              <label>Reason for count<input value={stockCountReason} onChange={(event) => setStockCountReason(event.target.value)} maxLength={500} placeholder="Monthly physical inventory count" /></label>
+              <label>Reason for count<input value={stockCountReason} onChange={(event) => setStockCountReason(event.target.value)} maxLength={400} placeholder="Monthly physical inventory count" /></label>
               <button type="button" className="pos-button primary" onClick={startStockCount} disabled={stockCountSaving || !locationId || !stockCountReason.trim()}>
                 {stockCountSaving ? "Starting…" : "Start physical count"}
               </button>
