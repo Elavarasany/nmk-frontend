@@ -1397,8 +1397,12 @@ export default function PosTerminal() {
     if (!returnSale) return { remaining: 0, refund: 0 };
     const toCents = (value) => Math.round((Number(value) || 0) * 100);
     const fromCents = (value) => value / 100;
-    const roundDivideHalfUp = (numerator, denominator) =>
-      denominator > 0 ? Math.floor((numerator + denominator / 2) / denominator) : 0;
+    const roundMultiplyDivideHalfUp = (amountCents, multiplier, denominator) => {
+      const divisor = BigInt(denominator);
+      if (divisor <= 0n) return 0;
+      const numerator = BigInt(amountCents) * BigInt(multiplier);
+      return Number((numerator + divisor / 2n) / divisor);
+    };
 
     const previous = saleReturns.flatMap((record) => record.items || [])
       .filter((returned) => Number(returned.saleItemId) === Number(item.id));
@@ -1420,7 +1424,7 @@ export default function PosTerminal() {
       const lineGrossCents = toCents(saleLine.lineTotal);
       let shareCents = index === sorted.length - 1
         ? totalDiscountCents - allocatedDiscountCents
-        : roundDivideHalfUp(totalDiscountCents * lineGrossCents, subtotalCents);
+        : roundMultiplyDivideHalfUp(totalDiscountCents, lineGrossCents, subtotalCents);
       shareCents = Math.max(0, Math.min(shareCents, totalDiscountCents - allocatedDiscountCents));
       if (Number(saleLine.id) === Number(item.id)) lineDiscountCents = shareCents;
       allocatedDiscountCents += shareCents;
@@ -1430,7 +1434,7 @@ export default function PosTerminal() {
     const refundCents = quantity === 0 ? 0
       : quantity === remaining
         ? Math.max(0, netLineCents - previouslyRefundedCents)
-        : roundDivideHalfUp(netLineCents * quantity, Math.max(1, soldQuantity));
+        : roundMultiplyDivideHalfUp(netLineCents, quantity, Math.max(1, soldQuantity));
     return { remaining, refund: fromCents(refundCents) };
   };
 
