@@ -1978,6 +1978,7 @@ export default function PosTerminal() {
                     <article><span>Sales after discount</span><strong>{money(salesReport.netSalesBeforeRefunds)}</strong></article>
                     <article><span>Sales reversals</span><strong>{money(salesReport.salesReversals ?? salesReport.refunds)}</strong></article>
                     <article><span>Recorded refund payments</span><strong>{money(salesReport.recordedRefundPayments ?? salesReport.refunds)}</strong></article>
+                    <article><span>Exchange credit applied</span><strong>{money(salesReport.exchangeCreditApplied ?? 0)}</strong></article>
                     <article><span>Net after reversals</span><strong>{money(salesReport.netSalesAfterRefunds)}</strong></article>
                   </div>
                   <div className="pos-report-grid">
