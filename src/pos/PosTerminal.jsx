@@ -436,7 +436,17 @@ export default function PosTerminal() {
   const removeFromCart = (variantId) => setCart((current) => current.filter((item) => item.variantId !== variantId));
 
   const updatePayment = (index, field, value) => setPayments((current) =>
-    current.map((payment, i) => i === index ? { ...payment, [field]: value } : payment));
+    current.map((payment, i) => {
+      if (i !== index) return payment;
+      if (field === "paymentMethod") {
+        return {
+          ...payment,
+          paymentMethod: value,
+          tenderedAmount: value === "CASH" ? (payment.tenderedAmount || "0.00") : "",
+        };
+      }
+      return { ...payment, [field]: value };
+    }));
 
   const addSplitPayment = () => {
     if (payments.length >= 3) return;
