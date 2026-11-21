@@ -113,3 +113,10 @@ The Inventory tab includes supplier creation, DRAFT purchase order creation, ord
 Supplier credit notes, accounts payable, GST/landed-cost accounting and automatic supplier payments are not included. These require the client's accounting policies and accountant-approved tax rules.
 
 Backend migration: `010-create-procurement.sql`. It is manual and has not been run against any live/client database.
+
+
+## Low-stock alerts
+
+The Inventory tab supports a per-location reorder level for each variant. A threshold of zero disables the alert. The low-stock list compares available quantity (on-hand less reserved) against the configured threshold, so online reservations are not mistakenly treated as available stock. Threshold changes record the staff username and timestamp.
+
+Backend migration: `011-audit-reorder-level-changes.sql`. It is manual and has not been run against any live/client database.
