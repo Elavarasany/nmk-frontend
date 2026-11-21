@@ -45,6 +45,7 @@ The operations branch now includes staff roles, register/shift cash reconciliati
 The remaining exclusions are:
 
 - Multi-register cashier assignment, shift reopening, supervisor override thresholds and cross-register cash transfers.
+- Linked exchange transactions that atomically apply returned-goods credit to a replacement sale. A return followed by a new sale is not an atomic exchange; the price-difference collection/refund policy must be confirmed before implementing this safely.
 - Credit notes, supplier accounts payable, supplier credit settlement and automated provider refund execution. UPI/card refunds must be completed externally and the confirmed reference recorded in POS.
 - GST/tax calculation, profit accounting, landed-cost accounting and accountant-approved invoice/tax wording.
 - A configurable permission-code matrix, per-register access restrictions and threshold-based approval workflows.
