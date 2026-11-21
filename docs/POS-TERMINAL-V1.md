@@ -120,3 +120,10 @@ Backend migration: `010-create-procurement.sql`. It is manual and has not been r
 The Inventory tab supports a per-location reorder level for each variant. A threshold of zero disables the alert. The low-stock list compares available quantity (on-hand less reserved) against the configured threshold, so online reservations are not mistakenly treated as available stock. Threshold changes record the staff username and timestamp.
 
 Backend migration: `011-audit-reorder-level-changes.sql`. It is manual and has not been run against any live/client database.
+
+
+## Sales and refund reporting
+
+The Reports tab provides date-scoped totals for transactions, subtotal, discounts, sales after discount, returns/refunds processed during the selected dates, net after refunds, sales and refund payment methods, cashier totals, daily totals and top products. Refunds are reported on the date the return is processed. The report is limited to 367 calendar days and is available to managers and administrators.
+
+The report is operational POS reporting only. It does not calculate GST, profit, supplier liabilities, bank settlements or accountant-approved financial statements.
