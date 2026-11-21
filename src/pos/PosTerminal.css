@@ -712,6 +712,24 @@
 @media (max-width: 760px) {
   .pos-inventory-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.pos-action-password {
+  display: grid;
+  gap: 5px;
+  min-width: 180px;
+  color: #667487;
+  font-size: 10px;
+  font-weight: 750;
+}
+.pos-action-password input {
+  height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 1px solid #dfe5ec;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--pos-ink);
+  font-size: 11px;
+}
 .pos-stock-count-card { margin-bottom: 18px; }
 .pos-stock-count-start {
   display: grid;
