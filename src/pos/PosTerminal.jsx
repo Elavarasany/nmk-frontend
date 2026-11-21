@@ -528,6 +528,7 @@ export default function PosTerminal() {
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
+  const [locationStockCountLocked, setLocationStockCountLocked] = useState(false);
   const [registers, setRegisters] = useState([]);
   const [registerId, setRegisterId] = useState("");
   const [shift, setShift] = useState(null);
@@ -747,12 +748,13 @@ export default function PosTerminal() {
   };
 
   const loadCatalog = useCallback(async () => {
-    if (!locationId) { setCatalog([]); return; }
+    if (!locationId) { setCatalog([]); setLocationStockCountLocked(false); return; }
     setCatalogLoading(true);
     setError("");
     try {
       const data = await apiRequest(`/admin/pos/catalog?locationId=${encodeURIComponent(locationId)}`);
       setCatalog(Array.isArray(data?.products) ? data.products : []);
+      setLocationStockCountLocked(Boolean(data?.stockCountLocked));
       setSelectedVariants({});
     } catch (err) { setError(err.message); }
     finally { setCatalogLoading(false); }
@@ -914,6 +916,7 @@ export default function PosTerminal() {
   const completeSale = async () => {
     setError("");
     setNotice("");
+    if (locationStockCountLocked) { setError("A physical stock count is in progress at this location. Sales are temporarily frozen."); return; }
     if (!shift?.id || shift.status !== "OPEN") { setError("Open your cashier shift before completing a sale."); return; }
     if (!cart.length) { setError("Add at least one item before checkout."); return; }
     if (discountValue > subtotal) { setError("Discount cannot exceed the subtotal."); return; }
@@ -1135,6 +1138,8 @@ export default function PosTerminal() {
         {error && <div className="pos-alert error" role="alert"><AlertCircle size={18} /><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={16} /></button></div>}
         {notice && <div className="pos-alert success" role="status"><CheckCircle2 size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss notice"><X size={16} /></button></div>}
 
+        {locationStockCountLocked && <div className="pos-alert error" role="alert"><AlertCircle size={18} /><span>Physical stock count in progress. Sales and stock movements are temporarily frozen at this location.</span></div>}
+
         <section className="pos-shift-panel">
           <div className="pos-shift-heading">
             <div>
@@ -1294,7 +1299,7 @@ export default function PosTerminal() {
                 {cashChange > 0 && <div className="pos-change-row"><span>Change to return</span><strong>{money(cashChange)}</strong></div>}
               </div>
 
-              <button type="button" className="pos-complete-button" onClick={completeSale} disabled={checkoutLoading || !cart.length || !locationId || !shift?.id || shift.status !== "OPEN" || Math.abs(paymentTotal - grandTotal) > 0.001}>
+              <button type="button" className="pos-complete-button" onClick={completeSale} disabled={checkoutLoading || !cart.length || !locationId || locationStockCountLocked || !shift?.id || shift.status !== "OPEN" || Math.abs(paymentTotal - grandTotal) > 0.001}>
                 {checkoutLoading ? <><RefreshCw className="pos-spin" size={18} /> Processing sale…</> : retryPending ? <><RefreshCw size={18} /> Retry same checkout · {money(grandTotal)}</> : <><Receipt size={18} /> Complete sale · {money(grandTotal)}</>}
               </button>
               <p className="pos-secure-note">Prices and stock are verified by the server. Completed sales are recorded with an audit trail.</p>
