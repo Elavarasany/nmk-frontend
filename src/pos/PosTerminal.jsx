@@ -147,6 +147,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [purchaseOrderNotes, setPurchaseOrderNotes] = useState("");
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
+  const [purchaseOrderRetry, setPurchaseOrderRetry] = useState(false);
+  const [purchaseOrderPayload, setPurchaseOrderPayload] = useState(null);
+  const purchaseOrderPending = useRef(null);
   const [receivingOrder, setReceivingOrder] = useState(null);
   const [goodsReceiptReason, setGoodsReceiptReason] = useState("");
   const [goodsReceiptQuantities, setGoodsReceiptQuantities] = useState({});
@@ -206,37 +209,59 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const createPurchaseOrder = async (event) => {
     event.preventDefault();
     if (!selectedSupplierId || !locationId) { onError("Choose an active supplier and store location."); return; }
-    const items = purchaseOrderItems.map((item) => ({
-      variantId: Number(item.variantId),
-      orderedQuantity: Number(item.orderedQuantity),
-      unitCost: Number(item.unitCost),
-    }));
-    if (!items.length || items.some((item) => !item.variantId || !Number.isInteger(item.orderedQuantity) || item.orderedQuantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost <= 0)) {
-      onError("Every purchase order line needs a variant, positive whole quantity and positive unit cost.");
-      return;
+    if (!purchaseOrderPayload) {
+      const items = purchaseOrderItems.map((item) => ({
+        variantId: Number(item.variantId),
+        orderedQuantity: Number(item.orderedQuantity),
+        unitCost: Number(item.unitCost),
+      }));
+      if (!items.length || items.some((item) => !item.variantId || !Number.isInteger(item.orderedQuantity) || item.orderedQuantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost <= 0)) {
+        onError("Every purchase order line needs a variant, positive whole quantity and positive unit cost.");
+        return;
+      }
+      if (new Set(items.map((item) => item.variantId)).size !== items.length) {
+        onError("Each variant can appear only once in a purchase order.");
+        return;
+      }
+      purchaseOrderPending.current = purchaseOrderPending.current || newIdempotencyKey();
+      setPurchaseOrderPayload({
+        supplierId: Number(selectedSupplierId),
+        locationId: Number(locationId),
+        notes: purchaseOrderNotes.trim() || null,
+        items,
+        idempotencyKey: purchaseOrderPending.current,
+      });
     }
-    if (new Set(items.map((item) => item.variantId)).size !== items.length) {
-      onError("Each variant can appear only once in a purchase order.");
-      return;
-    }
+    const payload = purchaseOrderPayload || {
+      supplierId: Number(selectedSupplierId),
+      locationId: Number(locationId),
+      notes: purchaseOrderNotes.trim() || null,
+      items: purchaseOrderItems.map((item) => ({
+        variantId: Number(item.variantId),
+        orderedQuantity: Number(item.orderedQuantity),
+        unitCost: Number(item.unitCost),
+      })),
+      idempotencyKey: purchaseOrderPending.current,
+    };
     setProcurementSaving(true);
     onError("");
     try {
       const created = await apiRequest("/admin/procurement/purchase-orders", {
-        method: "POST",
-        body: JSON.stringify({
-          supplierId: Number(selectedSupplierId),
-          locationId: Number(locationId),
-          notes: purchaseOrderNotes.trim() || null,
-          items,
-        }),
+        method: "POST", body: JSON.stringify(payload),
       });
       setPurchaseOrderNotes("");
       setPurchaseOrderItems([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
+      setPurchaseOrderPayload(null);
+      purchaseOrderPending.current = null;
+      setPurchaseOrderRetry(false);
       await loadProcurement();
       onNotice(`Draft purchase order ${created.orderNumber} created.`);
-    } catch (err) { onError(err.message); }
-    finally { setProcurementSaving(false); }
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setPurchaseOrderRetry(uncertain);
+      if (!uncertain) { setPurchaseOrderPayload(null); purchaseOrderPending.current = null; }
+      onError(`${err.message}${uncertain ? " Retry the exact same draft purchase order; its idempotency key is retained." : ""}`);
+    } finally { setProcurementSaving(false); }
   };
 
   const submitPurchaseOrder = async (order) => {
@@ -684,25 +709,25 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
           <form className="pos-procurement-form" onSubmit={createPurchaseOrder}>
             <h4>Create purchase order</h4>
-            <label>Supplier<select value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)} required>
+            <label>Supplier<select value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)} disabled={purchaseOrderRetry} required>
               <option value="">Choose active supplier</option>
               {suppliers.filter((supplier) => supplier.active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select></label>
-            <label>Order notes<input value={purchaseOrderNotes} onChange={(event) => setPurchaseOrderNotes(event.target.value)} maxLength={500} placeholder="Optional delivery or reference notes" /></label>
+            <label>Order notes<input value={purchaseOrderNotes} onChange={(event) => setPurchaseOrderNotes(event.target.value)} maxLength={500} placeholder="Optional delivery or reference notes" disabled={purchaseOrderRetry} /></label>
             <div className="pos-po-lines">
               {purchaseOrderItems.map((item, index) => <div className="pos-po-line" key={index}>
-                <label>Variant<select value={item.variantId} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, variantId: event.target.value } : line))} required>
+                <label>Variant<select value={item.variantId} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, variantId: event.target.value } : line))} disabled={purchaseOrderRetry} required>
                   <option value="">Select SKU</option>
                   {procurementVariants.map((variant) => <option key={variant.variantId} value={variant.variantId}>{variant.productName} · {variant.variantName} · {variant.sku}</option>)}
                 </select></label>
-                <label>Qty<input type="number" min="1" step="1" value={item.orderedQuantity} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, orderedQuantity: event.target.value } : line))} required /></label>
-                <label>Unit cost (₹)<input type="number" min="0.01" step="0.01" value={item.unitCost} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, unitCost: event.target.value } : line))} required /></label>
-                <button type="button" className="pos-remove-button" onClick={() => setPurchaseOrderItems((current) => current.filter((_, lineIndex) => lineIndex !== index))} disabled={purchaseOrderItems.length <= 1} aria-label="Remove purchase order line"><X size={15} /></button>
+                <label>Qty<input type="number" min="1" step="1" value={item.orderedQuantity} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, orderedQuantity: event.target.value } : line))} disabled={purchaseOrderRetry} required /></label>
+                <label>Unit cost (₹)<input type="number" min="0.01" step="0.01" value={item.unitCost} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, unitCost: event.target.value } : line))} disabled={purchaseOrderRetry} required /></label>
+                <button type="button" className="pos-remove-button" onClick={() => setPurchaseOrderItems((current) => current.filter((_, lineIndex) => lineIndex !== index))} disabled={purchaseOrderItems.length <= 1 || purchaseOrderRetry} aria-label="Remove purchase order line"><X size={15} /></button>
               </div>)}
             </div>
             <div className="pos-procurement-form-actions">
-              <button type="button" className="pos-button secondary compact" onClick={() => setPurchaseOrderItems((current) => [...current, { variantId: "", orderedQuantity: "1", unitCost: "" }])}>Add line</button>
-              <button type="submit" className="pos-button primary" disabled={procurementSaving || !selectedSupplierId || !locationId}>{procurementSaving ? "Creating…" : "Create draft PO"}</button>
+              <button type="button" className="pos-button secondary compact" onClick={() => setPurchaseOrderItems((current) => [...current, { variantId: "", orderedQuantity: "1", unitCost: "" }])} disabled={purchaseOrderRetry}>Add line</button>
+              <button type="submit" className="pos-button primary" disabled={procurementSaving || !selectedSupplierId || !locationId}>{procurementSaving ? "Creating…" : purchaseOrderRetry ? "Retry same draft PO" : "Create draft PO"}</button>
             </div>
           </form>
         </div>
