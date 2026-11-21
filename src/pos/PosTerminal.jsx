@@ -381,6 +381,19 @@ export default function PosTerminal() {
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
+  const [registers, setRegisters] = useState([]);
+  const [registerId, setRegisterId] = useState("");
+  const [shift, setShift] = useState(null);
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const [shiftSaving, setShiftSaving] = useState(false);
+  const [openingFloat, setOpeningFloat] = useState("0.00");
+  const [closingCashCount, setClosingCashCount] = useState("");
+  const [closingReason, setClosingReason] = useState("");
+  const [cashMovementType, setCashMovementType] = useState("CASH_IN");
+  const [cashMovementAmount, setCashMovementAmount] = useState("");
+  const [cashMovementReason, setCashMovementReason] = useState("");
+  const [newRegisterCode, setNewRegisterCode] = useState("MAIN");
+  const [newRegisterName, setNewRegisterName] = useState("Main Register");
   const [catalog, setCatalog] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [locationsLoading, setLocationsLoading] = useState(true);
@@ -421,6 +434,158 @@ export default function PosTerminal() {
     finally { setLocationsLoading(false); }
   }, []);
 
+  const loadRegisters = useCallback(async () => {
+    if (!locationId) {
+      setRegisters([]);
+      setRegisterId("");
+      setShift(null);
+      return;
+    }
+    try {
+      const data = await apiRequest(`/admin/pos/registers?locationId=${encodeURIComponent(locationId)}`);
+      const list = Array.isArray(data) ? data : [];
+      setRegisters(list);
+      setRegisterId((current) => current && list.some((item) => String(item.id) === String(current))
+        ? current : (list[0]?.id ? String(list[0].id) : ""));
+      if (!list.length) setShift(null);
+    } catch (err) {
+      setRegisters([]);
+      setRegisterId("");
+      setShift(null);
+      setError(err.message);
+    }
+  }, [locationId]);
+
+  const loadCurrentShift = useCallback(async () => {
+    if (!registerId) {
+      setShift(null);
+      return;
+    }
+    setShiftLoading(true);
+    try {
+      const data = await apiRequest(`/admin/pos/shifts/current?registerId=${encodeURIComponent(registerId)}`);
+      setShift(data || null);
+      setClosingCashCount(data?.expectedCash != null ? amount(data.expectedCash) : "");
+    } catch (err) {
+      setShift(null);
+      setError(err.message);
+    } finally {
+      setShiftLoading(false);
+    }
+  }, [registerId]);
+
+  const openShift = async () => {
+    if (!registerId) { setError("Select a register before opening a shift."); return; }
+    const float = Number(openingFloat);
+    if (!Number.isFinite(float) || float < 0) { setError("Enter a valid opening cash float."); return; }
+    setShiftSaving(true);
+    setError("");
+    try {
+      const opened = await apiRequest("/admin/pos/shifts/open", {
+        method: "POST",
+        body: JSON.stringify({
+          registerId: Number(registerId),
+          openingFloat: Number(amount(float)),
+          idempotencyKey: newIdempotencyKey(),
+        }),
+      });
+      setShift(opened);
+      setClosingCashCount(amount(opened.expectedCash));
+      setNotice("Cashier shift opened.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
+  const createRegister = async () => {
+    if (!locationId || !newRegisterCode.trim() || !newRegisterName.trim()) {
+      setError("Register code and name are required.");
+      return;
+    }
+    setShiftSaving(true);
+    setError("");
+    try {
+      await apiRequest("/admin/pos/registers", {
+        method: "POST",
+        body: JSON.stringify({
+          locationId: Number(locationId),
+          registerCode: newRegisterCode.trim(),
+          name: newRegisterName.trim(),
+        }),
+      });
+      await loadRegisters();
+      setNotice("Register created.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
+  const addCashMovement = async () => {
+    if (!shift?.id) { setError("Open a shift before recording drawer cash."); return; }
+    const value = Number(cashMovementAmount);
+    if (!Number.isFinite(value) || value <= 0 || !cashMovementReason.trim()) {
+      setError("Enter a positive amount and a reason for the cash movement.");
+      return;
+    }
+    setShiftSaving(true);
+    setError("");
+    try {
+      const updated = await apiRequest(`/admin/pos/shifts/${shift.id}/cash-movements`, {
+        method: "POST",
+        body: JSON.stringify({
+          movementType: cashMovementType,
+          amount: Number(amount(value)),
+          idempotencyKey: newIdempotencyKey(),
+          reason: cashMovementReason.trim(),
+        }),
+      });
+      setShift(updated);
+      setClosingCashCount(amount(updated.expectedCash));
+      setCashMovementAmount("");
+      setCashMovementReason("");
+      setNotice(cashMovementType === "CASH_IN" ? "Cash added to drawer." : "Cash removed from drawer.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
+  const closeShift = async () => {
+    if (!shift?.id) return;
+    const counted = Number(closingCashCount);
+    if (!Number.isFinite(counted) || counted < 0) {
+      setError("Enter the actual cash counted in the drawer.");
+      return;
+    }
+    const variance = Number((counted - Number(shift.expectedCash || 0)).toFixed(2));
+    if (Math.abs(variance) > 0.001 && !closingReason.trim()) {
+      setError("Explain the cash difference before closing the shift.");
+      return;
+    }
+    setShiftSaving(true);
+    setError("");
+    try {
+      const closed = await apiRequest(`/admin/pos/shifts/${shift.id}/close`, {
+        method: "POST",
+        body: JSON.stringify({
+          closingCashCount: Number(amount(counted)),
+          reason: closingReason.trim() || null,
+        }),
+      });
+      setShift(closed);
+      setNotice(`Shift closed. Cash variance: ${money(closed.cashVariance)}.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setShiftSaving(false);
+    }
+  };
+
   const loadCatalog = useCallback(async () => {
     if (!locationId) { setCatalog([]); return; }
     setCatalogLoading(true);
@@ -446,6 +611,8 @@ export default function PosTerminal() {
   }, [locationId]);
 
   useEffect(() => { loadLocations(); }, [loadLocations]);
+  useEffect(() => { loadRegisters(); }, [loadRegisters]);
+  useEffect(() => { if (registerId) loadCurrentShift(); }, [registerId, loadCurrentShift]);
   useEffect(() => { if (locationId) loadCatalog(); }, [locationId, loadCatalog]);
   useEffect(() => { if (activeTab === "history") loadHistory(0); }, [activeTab, loadHistory]);
 
@@ -551,6 +718,7 @@ export default function PosTerminal() {
   const completeSale = async () => {
     setError("");
     setNotice("");
+    if (!shift?.id || shift.status !== "OPEN") { setError("Open your cashier shift before completing a sale."); return; }
     if (!cart.length) { setError("Add at least one item before checkout."); return; }
     if (discountValue > subtotal) { setError("Discount cannot exceed the subtotal."); return; }
     if (Math.abs(paymentTotal - grandTotal) > 0.001) {
@@ -566,6 +734,7 @@ export default function PosTerminal() {
     if (!pendingKey.current) pendingKey.current = newIdempotencyKey();
     const body = pendingPayload || {
       locationId: Number(locationId),
+      shiftId: Number(shift.id),
       customerName: customerName.trim() || null,
       customerPhone: customerPhone.trim() || null,
       discountAmount: Number(amount(discountValue)),
@@ -590,8 +759,8 @@ export default function PosTerminal() {
       setRetryPending(false);
       setReceipt(sale);
       resetSale();
-      await loadCatalog();
-      setNotice("Sale completed. Stock has been updated.");
+      await Promise.all([loadCatalog(), loadCurrentShift()]);
+      setNotice("Sale completed. Stock and cash drawer have been updated.");
     } catch (err) {
       if (!err.status || err.status >= 500 || err.status === 409) {
         setRetryPending(true);
@@ -632,7 +801,7 @@ export default function PosTerminal() {
         </div>
         <div className="pos-topbar-right">
           <label className="pos-location-picker"><Store size={17} /><span>Store</span>
-            <select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={locationsLoading || !locations.length || retryPending}>
+            <select value={locationId} onChange={(e) => { setLocationId(e.target.value); setRegisterId(""); setShift(null); }} disabled={locationsLoading || !locations.length || retryPending}>
               {locations.length ? locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>) : <option value="">No location</option>}
             </select>
           </label>
@@ -652,6 +821,79 @@ export default function PosTerminal() {
 
         {error && <div className="pos-alert error" role="alert"><AlertCircle size={18} /><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={16} /></button></div>}
         {notice && <div className="pos-alert success" role="status"><CheckCircle2 size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss notice"><X size={16} /></button></div>}
+
+        <section className="pos-shift-panel">
+          <div className="pos-shift-heading">
+            <div>
+              <span className="pos-eyebrow">CASH REGISTER</span>
+              <h2>{shift?.status === "OPEN" ? "Shift is open" : shift?.status === "CLOSED" ? "Shift closed" : "Open a cashier shift"}</h2>
+              <p>{shift?.status === "OPEN" ? `Opened by ${shift.openedByUsername} · ${new Date(shift.openedAt).toLocaleString("en-IN")}` : "A shift is required before the terminal can complete sales."}</p>
+            </div>
+            <span className={shift?.status === "OPEN" ? "pos-shift-status open" : "pos-shift-status closed"}>
+              {shiftLoading ? "Checking…" : shift?.status || "NO OPEN SHIFT"}
+            </span>
+          </div>
+          <div className="pos-shift-controls">
+            <label>Register
+              <select value={registerId} onChange={(event) => { setRegisterId(event.target.value); setShift(null); }} disabled={shiftLoading || shiftSaving || retryPending}>
+                {registers.length ? registers.map((register) => <option key={register.id} value={register.id}>{register.registerCode} · {register.name}</option>) : <option value="">No register configured</option>}
+              </select>
+            </label>
+            {!shift?.id ? (
+              <>
+                <label>Opening cash float (₹)
+                  <input type="number" min="0" step="0.01" value={openingFloat} onChange={(event) => setOpeningFloat(event.target.value)} disabled={shiftSaving || !registerId} />
+                </label>
+                <button type="button" className="pos-button primary" onClick={openShift} disabled={shiftSaving || shiftLoading || !registerId}>
+                  {shiftSaving ? "Opening…" : "Open shift"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="pos-shift-expected"><span>Expected drawer cash</span><strong>{money(shift.expectedCash)}</strong></div>
+                <label>Cash counted (₹)
+                  <input type="number" min="0" step="0.01" value={closingCashCount} onChange={(event) => setClosingCashCount(event.target.value)} disabled={shiftSaving || shift.status !== "OPEN" || retryPending} />
+                </label>
+                <label>Variance reason (required if different)
+                  <input value={closingReason} onChange={(event) => setClosingReason(event.target.value)} maxLength={500} placeholder="Explain any cash difference" disabled={shiftSaving || shift.status !== "OPEN" || retryPending} />
+                </label>
+                <button type="button" className="pos-button secondary" onClick={closeShift} disabled={shiftSaving || shift.status !== "OPEN" || retryPending}>
+                  {shiftSaving ? "Saving…" : "Close shift"}
+                </button>
+              </>
+            )}
+          </div>
+          {shift?.status === "OPEN" && (
+            <div className="pos-cash-movement-controls">
+              <label>Cash drawer action
+                <select value={cashMovementType} onChange={(event) => setCashMovementType(event.target.value)} disabled={shiftSaving}>
+                  <option value="CASH_IN">Cash in</option>
+                  <option value="CASH_OUT">Cash out</option>
+                </select>
+              </label>
+              <label>Amount (₹)
+                <input type="number" min="0.01" step="0.01" value={cashMovementAmount} onChange={(event) => setCashMovementAmount(event.target.value)} disabled={shiftSaving} />
+              </label>
+              <label>Reason
+                <input value={cashMovementReason} onChange={(event) => setCashMovementReason(event.target.value)} maxLength={500} placeholder="Petty cash / bank drop / change float" disabled={shiftSaving} />
+              </label>
+              <button type="button" className="pos-button secondary" onClick={addCashMovement} disabled={shiftSaving}>
+                {cashMovementType === "CASH_IN" ? "Record cash in" : "Record cash out"}
+              </button>
+            </div>
+          )}
+          {!registers.length && staffRole === "ADMIN" && (
+            <div className="pos-register-create">
+              <strong>Create the first register</strong>
+              <input value={newRegisterCode} onChange={(event) => setNewRegisterCode(event.target.value)} maxLength={40} aria-label="Register code" />
+              <input value={newRegisterName} onChange={(event) => setNewRegisterName(event.target.value)} maxLength={120} aria-label="Register name" />
+              <button type="button" className="pos-button secondary" onClick={createRegister} disabled={shiftSaving}>Create register</button>
+            </div>
+          )}
+          {shift?.status === "CLOSED" && (
+            <p className="pos-shift-closed-note">This shift is closed. Open a new shift to continue selling. Final variance: {money(shift.cashVariance)}{shift.closingReason ? ` · ${shift.closingReason}` : ""}</p>
+          )}
+        </section>
 
         {activeTab === "checkout" ? (
           <div className="pos-workspace">
@@ -739,7 +981,7 @@ export default function PosTerminal() {
                 {cashChange > 0 && <div className="pos-change-row"><span>Change to return</span><strong>{money(cashChange)}</strong></div>}
               </div>
 
-              <button type="button" className="pos-complete-button" onClick={completeSale} disabled={checkoutLoading || !cart.length || !locationId || Math.abs(paymentTotal - grandTotal) > 0.001}>
+              <button type="button" className="pos-complete-button" onClick={completeSale} disabled={checkoutLoading || !cart.length || !locationId || !shift?.id || shift.status !== "OPEN" || Math.abs(paymentTotal - grandTotal) > 0.001}>
                 {checkoutLoading ? <><RefreshCw className="pos-spin" size={18} /> Processing sale…</> : retryPending ? <><RefreshCw size={18} /> Retry same checkout · {money(grandTotal)}</> : <><Receipt size={18} /> Complete sale · {money(grandTotal)}</>}
               </button>
               <p className="pos-secure-note">Prices and stock are verified by the server. Completed sales are recorded with an audit trail.</p>
