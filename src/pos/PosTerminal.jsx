@@ -60,6 +60,28 @@ function savePendingOperation(key, payload) {
   }));
 }
 
+function readPendingProcurementAction(key, valid) {
+  try {
+    const record = JSON.parse(sessionStorage.getItem(key) || "null");
+    const username = sessionStorage.getItem("adminUsername") || "";
+    if (!username || record?.username !== username || !Number.isInteger(Number(record.purchaseOrderId)) || !valid(record.payload)) {
+      if (record) sessionStorage.removeItem(key);
+      return null;
+    }
+    return { purchaseOrderId: Number(record.purchaseOrderId), payload: record.payload };
+  } catch {
+    sessionStorage.removeItem(key);
+    return null;
+  }
+}
+function savePendingProcurementAction(key, purchaseOrderId, payload) {
+  sessionStorage.setItem(key, JSON.stringify({
+    username: sessionStorage.getItem("adminUsername") || "",
+    purchaseOrderId: Number(purchaseOrderId),
+    payload,
+  }));
+}
+
 function readPendingFinancialAction(key) {
   try {
     const raw = sessionStorage.getItem(key);
@@ -305,28 +327,33 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [purchaseOrderNotes, setPurchaseOrderNotes] = useState("");
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
-  const [purchaseOrderRetry, setPurchaseOrderRetry] = useState(false);
+  const [purchaseOrderPayload, setPurchaseOrderPayload] = useState(() => readPendingOperation("nmk.pos.pending-purchase-order.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.supplierId && payload.locationId && Array.isArray(payload.items) && payload.items.length)));
+  const purchaseOrderPending = useRef(purchaseOrderPayload?.idempotencyKey || null);
+  const [purchaseOrderRetry, setPurchaseOrderRetry] = useState(Boolean(purchaseOrderPayload));
   const [purchaseOrderSubmitTarget, setPurchaseOrderSubmitTarget] = useState(null);
   const [purchaseOrderSubmitPassword, setPurchaseOrderSubmitPassword] = useState("");
-  const [purchaseOrderPayload, setPurchaseOrderPayload] = useState(null);
-  const purchaseOrderPending = useRef(null);
   const [receivingOrder, setReceivingOrder] = useState(null);
   const [goodsReceiptReason, setGoodsReceiptReason] = useState("");
   const [goodsReceiptQuantities, setGoodsReceiptQuantities] = useState({});
   const [goodsReceiptSaving, setGoodsReceiptSaving] = useState(false);
   const [goodsReceiptRetry, setGoodsReceiptRetry] = useState(false);
+  const pendingGoodsReceiptRecord = useRef(readPendingProcurementAction("nmk.pos.pending-goods-receipt.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && Array.isArray(payload.items) && payload.items.length && payload.reason)));
   const [goodsReceiptPassword, setGoodsReceiptPassword] = useState("");
-  const [goodsReceiptPayload, setGoodsReceiptPayload] = useState(null);
+  const [goodsReceiptPayload, setGoodsReceiptPayload] = useState(pendingGoodsReceiptRecord.current?.payload || null);
   const [procurementActionError, setProcurementActionError] = useState("");
-  const goodsReceiptPending = useRef(null);
+  const goodsReceiptPending = useRef(goodsReceiptPayload?.idempotencyKey || null);
   const [supplierReturnOrder, setSupplierReturnOrder] = useState(null);
   const [supplierReturnReason, setSupplierReturnReason] = useState("");
   const [supplierReturnQuantities, setSupplierReturnQuantities] = useState({});
   const [supplierReturnSaving, setSupplierReturnSaving] = useState(false);
   const [supplierReturnRetry, setSupplierReturnRetry] = useState(false);
   const [supplierReturnPassword, setSupplierReturnPassword] = useState("");
-  const [supplierReturnPayload, setSupplierReturnPayload] = useState(null);
-  const supplierReturnPending = useRef(null);
+  const pendingSupplierReturnRecord = useRef(readPendingProcurementAction("nmk.pos.pending-supplier-return.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && Array.isArray(payload.items) && payload.items.length && payload.reason)));
+  const [supplierReturnPayload, setSupplierReturnPayload] = useState(pendingSupplierReturnRecord.current?.payload || null);
+  const supplierReturnPending = useRef(supplierReturnPayload?.idempotencyKey || null);
 
   const loadProcurement = useCallback(async () => {
     setProcurementLoading(true);
@@ -340,6 +367,26 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setSelectedSupplierId((current) => current && supplierList.some((supplier) => String(supplier.id) === String(current) && supplier.active)
         ? current : (supplierList.find((supplier) => supplier.active)?.id ? String(supplierList.find((supplier) => supplier.active).id) : ""));
       setPurchaseOrders(Array.isArray(orderData) ? orderData : []);
+      const pendingReceipt = pendingGoodsReceiptRecord.current;
+      if (pendingReceipt && !receivingOrder) {
+        const order = orderData.find((item) => Number(item.id) === pendingReceipt.purchaseOrderId);
+        if (order) {
+          setReceivingOrder(order);
+          setGoodsReceiptReason(pendingReceipt.payload.reason);
+          setGoodsReceiptQuantities(Object.fromEntries(pendingReceipt.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
+          setGoodsReceiptRetry(true);
+        }
+      }
+      const pendingReturn = pendingSupplierReturnRecord.current;
+      if (pendingReturn && !supplierReturnOrder) {
+        const order = orderData.find((item) => Number(item.id) === pendingReturn.purchaseOrderId);
+        if (order) {
+          setSupplierReturnOrder(order);
+          setSupplierReturnReason(pendingReturn.payload.reason);
+          setSupplierReturnQuantities(Object.fromEntries(pendingReturn.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
+          setSupplierReturnRetry(true);
+        }
+      }
     } catch (err) { onError(err.message); }
     finally { setProcurementLoading(false); }
   }, [onError]);
@@ -370,7 +417,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const createPurchaseOrder = async (event) => {
     event.preventDefault();
-    if (!selectedSupplierId || !locationId) { onError("Choose an active supplier and store location."); return; }
+    if (!purchaseOrderPayload && (!selectedSupplierId || !locationId)) { onError("Choose an active supplier and store location."); return; }
     if (!purchaseOrderPayload) {
       const items = purchaseOrderItems.map((item) => ({
         variantId: Number(item.variantId),
@@ -391,6 +438,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         locationId: Number(locationId),
         notes: purchaseOrderNotes.trim() || null,
         items,
+        idempotencyKey: purchaseOrderPending.current,
+      });
+      savePendingOperation("nmk.pos.pending-purchase-order.v1", {
+        supplierId: Number(selectedSupplierId), locationId: Number(locationId),
+        notes: purchaseOrderNotes.trim() || null, items,
         idempotencyKey: purchaseOrderPending.current,
       });
     }
@@ -415,13 +467,17 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setPurchaseOrderItems([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
       setPurchaseOrderPayload(null);
       purchaseOrderPending.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-purchase-order.v1");
       setPurchaseOrderRetry(false);
       await loadProcurement();
       onNotice(`Draft purchase order ${created.orderNumber} created.`);
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setPurchaseOrderRetry(uncertain);
-      if (!uncertain) { setPurchaseOrderPayload(null); purchaseOrderPending.current = null; }
+      if (!uncertain) {
+        setPurchaseOrderPayload(null); purchaseOrderPending.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-purchase-order.v1");
+      }
       onError(`${err.message}${uncertain ? " Retry the exact same draft purchase order; its idempotency key is retained." : ""}`);
     } finally { setProcurementSaving(false); }
   };
@@ -470,7 +526,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const receivePurchaseOrderGoods = async () => {
     if (!receivingOrder || !goodsReceiptReason.trim()) { setProcurementActionError("Goods receipt reason is required."); onError("Goods receipt reason is required."); return; }
-    if (stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
+    if (!goodsReceiptPayload && stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
     if (!goodsReceiptPayload) {
       const items = receivingOrder.items
         .filter((item) => Number(goodsReceiptQuantities[item.id] || 0) > 0)
@@ -482,6 +538,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         reason: goodsReceiptReason.trim(),
         idempotencyKey: goodsReceiptPending.current,
         items,
+      });
+      savePendingProcurementAction("nmk.pos.pending-goods-receipt.v1", receivingOrder.id, {
+        reason: goodsReceiptReason.trim(), idempotencyKey: goodsReceiptPending.current, items,
       });
     }
     const payload = goodsReceiptPayload || {
@@ -501,6 +560,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setReceivingOrder(null);
       setGoodsReceiptPayload(null);
       goodsReceiptPending.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-goods-receipt.v1");
+      pendingGoodsReceiptRecord.current = null;
       setGoodsReceiptRetry(false);
       setGoodsReceiptPassword("");
       setProcurementActionError("");
@@ -510,7 +571,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setGoodsReceiptRetry(uncertain);
       setProcurementActionError(`${err.message}${uncertain ? " Retry the exact same receipt; its idempotency key is retained." : ""}`);
-      if (!uncertain) { setGoodsReceiptPayload(null); goodsReceiptPending.current = null; }
+      if (!uncertain) {
+        setGoodsReceiptPayload(null); goodsReceiptPending.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-goods-receipt.v1");
+        pendingGoodsReceiptRecord.current = null;
+      }
       onError(err.message);
     } finally { setGoodsReceiptSaving(false); }
   };
@@ -528,7 +593,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const returnPurchaseOrderGoods = async () => {
     if (!supplierReturnOrder || !supplierReturnReason.trim()) { setProcurementActionError("Supplier return reason is required."); onError("Supplier return reason is required."); return; }
-    if (stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
+    if (!supplierReturnPayload && stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
     if (!supplierReturnPayload) {
       const items = supplierReturnOrder.items
         .filter((item) => Number(supplierReturnQuantities[item.id] || 0) > 0)
@@ -542,6 +607,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         reason: supplierReturnReason.trim(),
         idempotencyKey: supplierReturnPending.current,
         items,
+      });
+      savePendingProcurementAction("nmk.pos.pending-supplier-return.v1", supplierReturnOrder.id, {
+        reason: supplierReturnReason.trim(), idempotencyKey: supplierReturnPending.current, items,
       });
     }
     const payload = supplierReturnPayload || {
@@ -561,6 +629,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setSupplierReturnOrder(null);
       setSupplierReturnPayload(null);
       supplierReturnPending.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-supplier-return.v1");
+      pendingSupplierReturnRecord.current = null;
       setSupplierReturnRetry(false);
       setSupplierReturnPassword("");
       setProcurementActionError("");
@@ -570,7 +640,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setSupplierReturnRetry(uncertain);
       setProcurementActionError(`${err.message}${uncertain ? " Retry the exact same supplier return; its idempotency key is retained." : ""}`);
-      if (!uncertain) { setSupplierReturnPayload(null); supplierReturnPending.current = null; }
+      if (!uncertain) {
+        setSupplierReturnPayload(null); supplierReturnPending.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-supplier-return.v1");
+        pendingSupplierReturnRecord.current = null;
+      }
       onError(err.message);
     } finally { setSupplierReturnSaving(false); }
   };
