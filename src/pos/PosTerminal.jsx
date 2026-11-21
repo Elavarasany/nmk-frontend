@@ -536,7 +536,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     onError("");
     try {
       const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/post`, { method: "POST" });
-      setStockCount(null);
+      setStockCount(data);
       setStockCountDrafts({});
       await onRefreshCatalog();
       onNotice(`Stock count #${data.id} posted. ${data.varianceLineCount} stock variances were applied.`);
@@ -549,8 +549,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setStockCountSaving(true);
     onError("");
     try {
-      await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST" });
-      setStockCount(null);
+      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST" });
+      setStockCount(data);
       setStockCountDrafts({});
       await onRefreshCatalog();
       onNotice("Stock count cancelled. Inventory operations are available again.");
@@ -740,6 +740,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                 <span>Session #{stockCount.id} · {stockCount.status.replaceAll("_", " ")}</span>
                 <strong>{stockCount.countedLineCount} / {stockCount.lineCount} counted · {stockCount.varianceLineCount} variances</strong>
               </div>
+              {stockCount.status === "POSTED" && <p className="pos-retry-note">Posted by {stockCount.postedByUsername || "—"} · {stockCount.postedAt ? new Date(stockCount.postedAt).toLocaleString("en-IN") : "time unavailable"}</p>}
+              {stockCount.status === "CANCELLED" && <p className="pos-retry-note">Cancelled by {stockCount.cancelledByUsername || "—"} · {stockCount.cancelledAt ? new Date(stockCount.cancelledAt).toLocaleString("en-IN") : "time unavailable"}</p>}
               <div className="pos-stock-count-table">
                 <table><thead><tr><th>Product / SKU</th><th>Expected</th><th>Counted</th><th>Variance</th><th></th></tr></thead>
                   <tbody>{stockCount.lines.map((line) => <tr key={line.id}>
@@ -757,7 +759,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <div className="pos-stock-count-actions">
                 {stockCount.status === "COUNTING" && <button type="button" className="pos-button primary" onClick={submitStockCount} disabled={stockCountSaving || stockCount.countedLineCount !== stockCount.lineCount}>Submit for review</button>}
                 {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving || currentStaffPreparedCount}>Post stock variances</button>}
-                <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving}>Cancel count</button>
+                {stockCountActive && <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving}>Cancel count</button>}
+                {["POSTED", "CANCELLED"].includes(stockCount.status) && <button type="button" className="pos-button secondary" onClick={() => setStockCount(null)}>Start another count</button>}
               </div>
               {stockCount.status === "READY_FOR_REVIEW" && (
                 <p className="pos-retry-note">
