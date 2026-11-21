@@ -42,8 +42,17 @@ async function apiRequest(path, options = {}) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (response.status === 401 || response.status === 403) {
-    const error = new Error("Your admin session is invalid or expired. Sign in again.");
+  if (response.status === 401) {
+    sessionStorage.removeItem("adminToken");
+    sessionStorage.removeItem("adminUsername");
+    sessionStorage.removeItem("adminRole");
+    window.dispatchEvent(new Event("nmk:session-expired"));
+    const error = new Error("Your admin session expired. Sign in again; any unfinished operation must be checked before you retry it.");
+    error.status = response.status;
+    throw error;
+  }
+  if (response.status === 403) {
+    const error = new Error(data?.message || "Your account is not permitted to perform this action. Contact an administrator if this is unexpected.");
     error.status = response.status;
     throw error;
   }
@@ -1173,6 +1182,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
 export default function PosTerminal() {
   const navigate = useNavigate();
+  useEffect(() => {
+    const handleExpiredSession = () => navigate("/admin", { replace: true });
+    window.addEventListener("nmk:session-expired", handleExpiredSession);
+    return () => window.removeEventListener("nmk:session-expired", handleExpiredSession);
+  }, [navigate]);
   const staffRole = sessionStorage.getItem("adminRole") || "CASHIER";
   const canManageInventory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
