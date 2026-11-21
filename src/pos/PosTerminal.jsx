@@ -2315,6 +2315,7 @@ export default function PosTerminal() {
                         onChange={(event) => setReturnQuantities((current) => ({
                           ...current, [item.id]: Math.min(info.remaining, Math.max(0, Number(event.target.value) || 0))
                         }))} /></td>
+                      <td><strong>{money(info.refund)}</strong></td>
                       <td>
                         <select value={returnDispositions[item.id] || "RESTOCK"}
                           disabled={returnSaving || returnRetryPending || Number(returnQuantities[item.id] || 0) <= 0}
@@ -2375,7 +2376,7 @@ export default function PosTerminal() {
             <h3 className="pos-exchange-section-title">1. Original items being returned</h3>
             <div className="pos-return-lines">
               <table>
-                <thead><tr><th>Item</th><th>Sold</th><th>Remaining</th><th>Exchange qty</th><th>Disposition</th></tr></thead>
+                <thead><tr><th>Item</th><th>Sold</th><th>Remaining</th><th>Exchange qty</th><th>Return value</th><th>Disposition</th></tr></thead>
                 <tbody>
                   {(returnSale.items || []).map((item) => {
                     const info = getReturnLineInfo(item);
