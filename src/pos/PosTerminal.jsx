@@ -828,9 +828,17 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                 </table>
               </div>
               <div className="pos-stock-count-actions">
+                {stockCount.status === "READY_FOR_REVIEW" && <label className="pos-action-password">Password to post
+                  <input type="password" autoComplete="current-password" value={stockCountPostPassword}
+                    onChange={(event) => setStockCountPostPassword(event.target.value)} disabled={stockCountSaving} />
+                </label>}
+                {stockCountActive && <label className="pos-action-password">Password to cancel
+                  <input type="password" autoComplete="current-password" value={stockCountCancelPassword}
+                    onChange={(event) => setStockCountCancelPassword(event.target.value)} disabled={stockCountSaving} />
+                </label>}
                 {stockCount.status === "COUNTING" && <button type="button" className="pos-button primary" onClick={submitStockCount} disabled={stockCountSaving || stockCount.countedLineCount !== stockCount.lineCount}>Submit for review</button>}
-                {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving || currentStaffPreparedCount}>Post stock variances</button>}
-                {stockCountActive && <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving}>Cancel count</button>}
+                {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving || currentStaffPreparedCount || !stockCountPostPassword.trim()}>Post stock variances</button>}
+                {stockCountActive && <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving || !stockCountCancelPassword.trim()}>Cancel count</button>}
                 {["POSTED", "CANCELLED"].includes(stockCount.status) && <button type="button" className="pos-button secondary" onClick={() => setStockCount(null)}>Start another count</button>}
               </div>
               {stockCount.status === "READY_FOR_REVIEW" && (
@@ -961,8 +969,10 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <label>Quantity received<input type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} disabled={receiptRetry} required /></label>
               <label>Reason<input value={reason} onChange={(e) => setReason(e.target.value)} disabled={receiptRetry} maxLength={500} required /></label>
             </div>
+            <label>Confirm staff password<input type="password" autoComplete="current-password" value={receiptPassword}
+              onChange={(e) => setReceiptPassword(e.target.value)} disabled={receiptSaving} required placeholder="Required to receive stock" /></label>
             {receiptRetry && <p className="pos-retry-note">A previous receipt response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId || stockCountActive}>
+            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId || stockCountActive || !receiptPassword.trim()}>
               {receiptSaving ? <><RefreshCw className="pos-spin" size={15} /> Receiving…</> : receiptRetry ? <><RefreshCw size={15} /> Retry same receipt</> : <><Plus size={16} /> Receive stock</>}
             </button>
           </form>
@@ -987,9 +997,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <label>Quantity change (+ / −)<input type="number" min="-1000000" max="1000000" step="1" value={adjustmentDelta} onChange={(e) => setAdjustmentDelta(e.target.value)} disabled={adjustmentRetry} required /></label>
               <label>Reason<input value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} disabled={adjustmentRetry} maxLength={500} required /></label>
             </div>
+            <label>Confirm staff password<input type="password" autoComplete="current-password" value={adjustmentPassword}
+              onChange={(e) => setAdjustmentPassword(e.target.value)} disabled={adjustmentSaving} required placeholder="Required to adjust stock" /></label>
             <small>Use a positive number to add stock and a negative number to remove stock. Adjustments cannot reduce on-hand below stock already reserved for online orders.</small>
             {adjustmentRetry && <p className="pos-retry-note">A previous adjustment response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId || stockCountActive}>
+            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId || stockCountActive || !adjustmentPassword.trim()}>
               {adjustmentSaving ? <><RefreshCw className="pos-spin" size={15} /> Adjusting…</> : adjustmentRetry ? <><RefreshCw size={15} /> Retry same adjustment</> : <><Plus size={16} /> Apply adjustment</>}
             </button>
           </form>
