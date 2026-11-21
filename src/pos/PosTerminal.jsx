@@ -1401,6 +1401,8 @@ export default function PosTerminal() {
   const [salesReport, setSalesReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [inventoryReport, setInventoryReport] = useState(null);
+  const [shiftHistory, setShiftHistory] = useState([]);
+  const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [procurementCostReport, setProcurementCostReport] = useState(null);
   const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
@@ -1709,6 +1711,17 @@ export default function PosTerminal() {
     finally { setReportLoading(false); }
   }, [locationId, reportFrom, reportTo]);
 
+  const loadShiftHistory = useCallback(async () => {
+    if (!locationId) return;
+    setShiftHistoryLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(`/admin/pos/shifts/history?locationId=${encodeURIComponent(locationId)}`);
+      setShiftHistory(Array.isArray(data) ? data : []);
+    } catch (err) { setError(err.message); }
+    finally { setShiftHistoryLoading(false); }
+  }, [locationId]);
+
   const loadInventoryReport = useCallback(async () => {
     if (!locationId) return;
     setInventoryReportLoading(true);
@@ -1919,6 +1932,7 @@ export default function PosTerminal() {
   useEffect(() => { if (activeTab === "history") loadHistory(0); }, [activeTab, loadHistory]);
   useEffect(() => { if (activeTab === "reports") loadSalesReport(); }, [activeTab, loadSalesReport]);
   useEffect(() => { if (activeTab === "inventory-report") loadInventoryReport(); }, [activeTab, loadInventoryReport]);
+  useEffect(() => { if (activeTab === "shift-history") loadShiftHistory(); }, [activeTab, loadShiftHistory]);
 
   const categories = useMemo(() => ["All", ...new Set(catalog.map((p) => p.category).filter(Boolean))], [catalog]);
   const filteredProducts = useMemo(() => {
@@ -2546,6 +2560,7 @@ export default function PosTerminal() {
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><BarChart3 size={17} /> Reports</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "inventory-report" ? "active" : ""}`} onClick={() => setActiveTab("inventory-report")}><ClipboardCheck size={17} /> Stock report</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "shift-history" ? "active" : ""}`} onClick={() => setActiveTab("shift-history")}><Clock3 size={17} /> Shift history</button>}
           </div>
         </div>
 
@@ -2733,6 +2748,29 @@ export default function PosTerminal() {
           </div>
         ) : activeTab === "inventory" ? (
           <InventoryPanel locationId={locationId} catalog={catalog} onRefreshCatalog={loadCatalog} onNotice={setNotice} onError={setError} />
+        ) : activeTab === "shift-history" ? (
+          <section className="pos-history-panel pos-report-panel">
+            <div className="pos-panel-heading">
+              <div><h2>Register shift reconciliation</h2><p>Recent 100 shifts for this location, including opening float, expected drawer cash, counted cash and variance. Managers and administrators only.</p></div>
+              <button type="button" className="pos-button secondary compact" onClick={loadShiftHistory} disabled={shiftHistoryLoading}>
+                <RefreshCw size={15} className={shiftHistoryLoading ? "pos-spin" : ""} /> Refresh
+              </button>
+            </div>
+            {shiftHistoryLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading register shifts…</span></div>
+              : !shiftHistory.length ? <div className="pos-empty-state"><Clock3 /><strong>No shifts recorded</strong><span>Register opening and closing reconciliations will appear here.</span></div>
+                : <div className="pos-history-table-wrap"><table className="pos-history-table">
+                  <thead><tr><th>Register</th><th>Cashier</th><th>Opened</th><th>Closed</th><th>Opening float</th><th>Expected cash</th><th>Counted cash</th><th>Variance</th><th>Status / reason</th></tr></thead>
+                  <tbody>{shiftHistory.map((row) => <tr key={row.id}>
+                    <td><strong>{row.registerCode}</strong><small>Shift #{row.id}</small></td>
+                    <td>{row.openedByUsername}<small>{row.closedByUsername ? `Closed by ${row.closedByUsername}` : "Not yet closed"}</small></td>
+                    <td>{row.openedAt ? new Date(row.openedAt).toLocaleString("en-IN") : "—"}</td>
+                    <td>{row.closedAt ? new Date(row.closedAt).toLocaleString("en-IN") : "—"}</td>
+                    <td>{money(row.openingFloat)}</td><td>{money(row.expectedCash)}</td><td>{row.closingCashCount == null ? "—" : money(row.closingCashCount)}</td>
+                    <td><strong>{row.cashVariance == null ? "—" : money(row.cashVariance)}</strong></td>
+                    <td><span className={row.status === "OPEN" ? "pos-stock-status low" : "pos-stock-status healthy"}>{row.status}</span><small>{row.closingReason || "—"}</small></td>
+                  </tr>)}</tbody>
+                </table></div>}
+          </section>
         ) : activeTab === "inventory-report" ? (
           <section className="pos-history-panel pos-report-panel">
             <div className="pos-panel-heading">
