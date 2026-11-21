@@ -2198,6 +2198,7 @@ export default function PosTerminal() {
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button>
             {canViewHistory && <button type="button" className="pos-button secondary" onClick={beginReturn} disabled={returnLoading}>{returnLoading ? "Loading…" : "Process return"}</button>}
+            {canViewHistory && shift?.status === "OPEN" && <button type="button" className="pos-button secondary" onClick={beginExchange} disabled={returnLoading || locationStockCountLocked}>{returnLoading ? "Loading…" : "Process exchange"}</button>}
             {canViewHistory && shift?.status === "OPEN" && selectedSaleReturns?.length === 0 &&
               <button type="button" className="pos-button secondary" onClick={() => openVoidDialog(selectedHistorySale)} disabled={saleReturnsLoading}>Void full sale</button>}
             {canViewHistory && selectedSaleReturns?.length > 0 &&
@@ -2273,6 +2274,131 @@ export default function PosTerminal() {
               <button type="button" className="pos-button secondary" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending}>Cancel</button>
               <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || !shift?.id || shift.status !== "OPEN"}>
                 {returnSaving ? "Recording…" : returnRetryPending ? "Retry same return" : "Confirm return"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {returnSale && exchangeMode && (
+        <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !exchangeSaving && !exchangeRetryPending) { setReturnSale(null); setExchangeMode(false); }
+        }}>
+          <section className="pos-return-modal pos-exchange-modal" role="dialog" aria-modal="true" aria-labelledby="pos-exchange-title">
+            <div className="pos-modal-toolbar">
+              <div><span className="pos-eyebrow">LINKED RETURN + REPLACEMENT SALE</span><h2 id="pos-exchange-title">Exchange {returnSale.invoiceNumber}</h2></div>
+              <button type="button" className="pos-icon-button" onClick={() => { setReturnSale(null); setExchangeMode(false); }}
+                disabled={exchangeSaving || exchangeRetryPending} aria-label="Close exchange"><X /></button>
+            </div>
+            <p className="pos-return-note">This creates one linked exchange. The original return and replacement sale, stock movements and actual cash movements commit together. Returned value becomes non-cash exchange credit; only the price difference is collected or refunded.</p>
+            {error && <p className="pos-return-error" role="alert">{error}</p>}
+
+            <h3 className="pos-exchange-section-title">1. Original items being returned</h3>
+            <div className="pos-return-lines">
+              <table>
+                <thead><tr><th>Item</th><th>Sold</th><th>Remaining</th><th>Exchange qty</th><th>Disposition</th></tr></thead>
+                <tbody>
+                  {(returnSale.items || []).map((item) => {
+                    const info = getReturnLineInfo(item);
+                    return <tr key={item.id}>
+                      <td><strong>{item.productName}</strong><small>{item.variantName || item.sku}</small></td>
+                      <td>{item.quantity}</td><td>{info.remaining}</td>
+                      <td><input type="number" min="0" max={info.remaining} step="1"
+                        value={returnQuantities[item.id] || ""}
+                        disabled={exchangeSaving || exchangeRetryPending || info.remaining <= 0}
+                        onChange={(event) => setReturnQuantities((current) => ({
+                          ...current, [item.id]: Math.min(info.remaining, Math.max(0, Number(event.target.value) || 0))
+                        }))} /></td>
+                      <td>
+                        <select value={returnDispositions[item.id] || "RESTOCK"}
+                          disabled={exchangeSaving || exchangeRetryPending || Number(returnQuantities[item.id] || 0) <= 0}
+                          onChange={(event) => setReturnDispositions((current) => ({ ...current, [item.id]: event.target.value }))}>
+                          <option value="RESTOCK">Restock</option><option value="DAMAGED">Damaged</option><option value="DISCARD">Discard</option>
+                        </select>
+                        {(returnDispositions[item.id] || "RESTOCK") !== "RESTOCK" && Number(returnQuantities[item.id] || 0) > 0 &&
+                          <input className="pos-return-disposition-reason" value={returnDispositionReasons[item.id] || ""}
+                            onChange={(event) => setReturnDispositionReasons((current) => ({ ...current, [item.id]: event.target.value }))}
+                            placeholder="Disposition reason" maxLength={500} disabled={exchangeSaving || exchangeRetryPending} />}
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <label className="pos-return-field">Exchange reason
+              <input value={exchangeReason} onChange={(event) => setExchangeReason(event.target.value)} maxLength={500}
+                placeholder="Reason for exchange" disabled={exchangeSaving || exchangeRetryPending} />
+            </label>
+
+            <h3 className="pos-exchange-section-title">2. Replacement items</h3>
+            <div className="pos-exchange-add-row">
+              <select value={exchangeSelectedVariantId} onChange={(event) => setExchangeSelectedVariantId(event.target.value)}
+                disabled={exchangeSaving || exchangeRetryPending}>
+                <option value="">Choose a replacement product / variant</option>
+                {exchangeCatalogVariants.map((item) => <option key={item.variantId} value={item.variantId}>
+                  {item.productName} — {item.variantName || item.sku} · {money(item.sellingPrice)} · available {item.availableQuantity}
+                </option>)}
+              </select>
+              <button type="button" className="pos-button secondary" onClick={addExchangeItem}
+                disabled={!exchangeSelectedVariantId || exchangeSaving || exchangeRetryPending}><Plus size={16} /> Add item</button>
+            </div>
+            {exchangeItems.length > 0 ? <div className="pos-exchange-items">
+              {exchangeItems.map((item) => <div className="pos-exchange-item" key={item.variantId}>
+                <div><strong>{item.productName}</strong><small>{item.variantName || item.sku} · {money(item.unitPrice)} each</small></div>
+                <label>Qty<input type="number" min="1" max="9999" value={item.quantity}
+                  onChange={(event) => updateExchangeQuantity(item.variantId, event.target.value)}
+                  disabled={exchangeSaving || exchangeRetryPending} /></label>
+                <strong>{money(item.unitPrice * item.quantity)}</strong>
+                <button type="button" className="pos-icon-button" onClick={() => setExchangeItems((current) => current.filter((row) => row.variantId !== item.variantId))}
+                  disabled={exchangeSaving || exchangeRetryPending} aria-label={`Remove ${item.productName}`}><Trash2 size={16} /></button>
+              </div>)}
+            </div> : <p className="pos-retry-note">No replacement items added yet.</p>}
+            <label className="pos-return-field">Replacement discount
+              <input type="number" min="0" step="0.01" value={exchangeDiscount}
+                onChange={(event) => setExchangeDiscount(event.target.value)}
+                disabled={!canApplyDiscount || exchangeSaving || exchangeRetryPending} />
+            </label>
+
+            <h3 className="pos-exchange-section-title">3. Settlement</h3>
+            <div className="pos-exchange-settlement">
+              <div><span>Returned value</span><strong>{money(returnQuote)}</strong></div>
+              <div><span>Replacement subtotal</span><strong>{money(exchangeSubtotal)}</strong></div>
+              <div><span>Replacement discount</span><strong>− {money(exchangeDiscountValue)}</strong></div>
+              <div><span>Replacement value</span><strong>{money(exchangeReplacementValue)}</strong></div>
+              <div><span>Exchange credit applied</span><strong>{money(Math.min(returnQuote, exchangeReplacementValue))}</strong></div>
+              <div className="difference"><span>Customer pays</span><strong>{money(exchangeCollectionDue)}</strong></div>
+              <div className="difference"><span>Customer receives refund</span><strong>{money(exchangeRefundDue)}</strong></div>
+            </div>
+            {exchangeCollectionDue > 0 && <div className="pos-exchange-payment">
+              <strong>Collect the difference</strong>
+              <label>Payment method<select value={exchangeCollectionMethod} onChange={(event) => setExchangeCollectionMethod(event.target.value)} disabled={exchangeSaving || exchangeRetryPending}>
+                <option value="CASH">Cash</option><option value="UPI">UPI</option><option value="CARD">Card</option>
+              </select></label>
+              {exchangeCollectionMethod === "CASH" ? <label>Cash received
+                <input type="number" min={amount(exchangeCollectionDue)} step="0.01" value={exchangeCollectionTendered}
+                  onChange={(event) => setExchangeCollectionTendered(event.target.value)} disabled={exchangeSaving || exchangeRetryPending} />
+              </label> : <label>Payment reference (optional)
+                <input value={exchangeCollectionReference} onChange={(event) => setExchangeCollectionReference(event.target.value)}
+                  maxLength={150} placeholder="UPI/card transaction reference" disabled={exchangeSaving || exchangeRetryPending} />
+              </label>}
+              {exchangeCollectionMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the UPI/card collection externally first. This POS records the reference; it does not verify provider settlement.</p>}
+            </div>}
+            {exchangeRefundDue > 0 && <div className="pos-exchange-payment">
+              <strong>Refund the excess returned value</strong>
+              <label>Refund method<select value={exchangeRefundMethod} onChange={(event) => setExchangeRefundMethod(event.target.value)} disabled={exchangeSaving || exchangeRetryPending}>
+                <option value="CASH">Cash</option><option value="UPI">UPI</option><option value="CARD">Card</option>
+              </select></label>
+              {exchangeRefundMethod !== "CASH" && <label>Refund transaction reference
+                <input value={exchangeRefundReference} onChange={(event) => setExchangeRefundReference(event.target.value)}
+                  maxLength={150} placeholder="Completed provider refund reference" disabled={exchangeSaving || exchangeRetryPending} />
+              </label>}
+              {exchangeRefundMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the UPI/card refund externally first. This POS records the reference; it does not send the provider refund.</p>}
+            </div>}
+            <div className="pos-modal-actions">
+              <button type="button" className="pos-button secondary" onClick={() => { setReturnSale(null); setExchangeMode(false); }}
+                disabled={exchangeSaving || exchangeRetryPending}>Cancel</button>
+              <button type="button" className="pos-button primary" onClick={submitExchange}
+                disabled={exchangeSaving || !shift?.id || shift.status !== "OPEN" || !exchangeItems.length}>
+                {exchangeSaving ? "Processing…" : exchangeRetryPending ? "Retry same exchange" : "Confirm exchange"}
               </button>
             </div>
           </section>
