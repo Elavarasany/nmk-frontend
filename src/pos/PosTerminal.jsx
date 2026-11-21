@@ -1115,6 +1115,20 @@ export default function PosTerminal() {
   const [returnRetryPending, setReturnRetryPending] = useState(false);
   const [returnPendingPayload, setReturnPendingPayload] = useState(null);
   const returnPendingKey = useRef(null);
+  const [exchangeMode, setExchangeMode] = useState(false);
+  const [exchangeReason, setExchangeReason] = useState("");
+  const [exchangeItems, setExchangeItems] = useState([]);
+  const [exchangeSelectedVariantId, setExchangeSelectedVariantId] = useState("");
+  const [exchangeDiscount, setExchangeDiscount] = useState("0.00");
+  const [exchangeCollectionMethod, setExchangeCollectionMethod] = useState("CASH");
+  const [exchangeCollectionTendered, setExchangeCollectionTendered] = useState("");
+  const [exchangeCollectionReference, setExchangeCollectionReference] = useState("");
+  const [exchangeRefundMethod, setExchangeRefundMethod] = useState("CASH");
+  const [exchangeRefundReference, setExchangeRefundReference] = useState("");
+  const [exchangeSaving, setExchangeSaving] = useState(false);
+  const [exchangeRetryPending, setExchangeRetryPending] = useState(false);
+  const [exchangePendingPayload, setExchangePendingPayload] = useState(null);
+  const exchangePendingKey = useRef(null);
   const pendingKey = useRef(null);
   const searchRef = useRef(null);
 
@@ -1468,6 +1482,24 @@ export default function PosTerminal() {
     return (returnSale.items || []).reduce((sum, item) => sum + getReturnLineInfo(item).refund, 0);
   }, [returnSale, saleReturns, returnQuantities]);
 
+  const exchangeSubtotal = exchangeItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const exchangeDiscountValue = Math.max(0, Number((Number(exchangeDiscount) || 0).toFixed(2)));
+  const exchangeReplacementValue = Math.max(0, exchangeSubtotal - exchangeDiscountValue);
+  const exchangeCollectionDue = Math.max(0, exchangeReplacementValue - returnQuote);
+  const exchangeRefundDue = Math.max(0, returnQuote - exchangeReplacementValue);
+  const exchangeCatalogVariants = useMemo(() => catalog.flatMap((product) =>
+    (product.variants || []).map((variant) => ({
+      productId: product.productId,
+      productName: product.name,
+      variantId: variant.variantId,
+      variantName: variant.variantName,
+      sku: variant.sku,
+      sellingPrice: Number(variant.sellingPrice || 0),
+      availableQuantity: Number(variant.availableQuantity || 0),
+    }))
+  ).filter((variant) => variant.productId && variant.variantId && variant.sellingPrice > 0),
+  [catalog]);
+
   useEffect(() => {
     if (payments.length === 1) {
       setPayments((current) => current.length === 1 ? [{
@@ -1615,6 +1647,7 @@ export default function PosTerminal() {
       const rows = await apiRequest(`/admin/pos/sales/${selectedHistorySale.id}/returns`);
       setSaleReturns(Array.isArray(rows) ? rows : []);
       setReturnSale(selectedHistorySale);
+      setExchangeMode(false);
       setReturnReason("");
       setReturnQuantities({});
       setReturnDispositions({});
@@ -1630,6 +1663,146 @@ export default function PosTerminal() {
     } finally {
       setReturnLoading(false);
     }
+  };
+
+  const beginExchange = async () => {
+    if (!selectedHistorySale) return;
+    setReturnLoading(true);
+    setError("");
+    try {
+      const rows = await apiRequest(`/admin/pos/sales/${selectedHistorySale.id}/returns`);
+      setSaleReturns(Array.isArray(rows) ? rows : []);
+      setReturnSale(selectedHistorySale);
+      setReturnQuantities({});
+      setReturnDispositions({});
+      setReturnDispositionReasons({});
+      setExchangeReason("");
+      setExchangeItems([]);
+      setExchangeSelectedVariantId("");
+      setExchangeDiscount("0.00");
+      setExchangeCollectionMethod("CASH");
+      setExchangeCollectionTendered("");
+      setExchangeCollectionReference("");
+      setExchangeRefundMethod("CASH");
+      setExchangeRefundReference("");
+      setExchangeRetryPending(false);
+      setExchangePendingPayload(null);
+      exchangePendingKey.current = null;
+      setExchangeMode(true);
+      setSelectedHistorySale(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReturnLoading(false);
+    }
+  };
+
+  const addExchangeItem = () => {
+    const selected = exchangeCatalogVariants.find((item) => String(item.variantId) === String(exchangeSelectedVariantId));
+    if (!selected) return;
+    setExchangeItems((current) => {
+      const existing = current.find((item) => item.variantId === selected.variantId);
+      if (existing) return current.map((item) => item.variantId === selected.variantId
+        ? { ...item, quantity: item.quantity + 1 } : item);
+      return [...current, { ...selected, quantity: 1 }];
+    });
+  };
+
+  const updateExchangeQuantity = (variantId, quantity) => {
+    const next = Math.max(1, Math.min(9999, Number(quantity) || 1));
+    setExchangeItems((current) => current.map((item) => item.variantId === variantId ? { ...item, quantity: next } : item));
+  };
+
+  const submitExchange = async () => {
+    if (!returnSale) return;
+    if (!shift?.id || shift.status !== "OPEN") { setError("Open an authorized shift before processing an exchange."); return; }
+    if (!exchangeReason.trim()) { setError("An exchange reason is required."); return; }
+    const selectedItems = (returnSale.items || []).filter((item) => Number(returnQuantities[item.id] || 0) > 0);
+    if (!selectedItems.length) { setError("Select at least one original sale quantity to exchange."); return; }
+    if (!exchangeItems.length) { setError("Add at least one replacement item."); return; }
+    if (exchangeDiscountValue > exchangeSubtotal) { setError("Replacement discount cannot exceed replacement subtotal."); return; }
+    for (const item of selectedItems) {
+      const disposition = returnDispositions[item.id] || "RESTOCK";
+      if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
+        setError("Explain why each damaged or discarded returned item cannot be restocked."); return;
+      }
+    }
+    if (exchangeRefundDue > 0 && exchangeRefundMethod !== "CASH" && !exchangeRefundReference.trim()) {
+      setError("Enter the completed UPI/card refund transaction reference."); return;
+    }
+    if (exchangeCollectionDue > 0 && exchangeCollectionMethod === "CASH"
+        && (Number(exchangeCollectionTendered) || 0) < exchangeCollectionDue) {
+      setError("Cash received must cover the amount due for the replacement."); return;
+    }
+    if (!exchangePendingPayload) {
+      exchangePendingKey.current = exchangePendingKey.current || newIdempotencyKey();
+      const payload = {
+        shiftId: Number(shift.id),
+        reason: exchangeReason.trim(),
+        idempotencyKey: exchangePendingKey.current,
+        returnItems: selectedItems.map((item) => ({
+          saleItemId: Number(item.id),
+          quantity: Number(returnQuantities[item.id]),
+          restockDisposition: returnDispositions[item.id] || "RESTOCK",
+          dispositionReason: (returnDispositionReasons[item.id] || "").trim() || null,
+        })),
+        replacementItems: exchangeItems.map((item) => ({
+          productId: Number(item.productId), variantId: Number(item.variantId), quantity: Number(item.quantity),
+        })),
+        replacementDiscountAmount: Number(amount(exchangeDiscountValue)),
+        collectionPayments: exchangeCollectionDue > 0 ? [{
+          paymentMethod: exchangeCollectionMethod,
+          amount: Number(amount(exchangeCollectionDue)),
+          ...(exchangeCollectionMethod === "CASH" ? { tenderedAmount: Number(amount(exchangeCollectionTendered)) } : {}),
+          ...(exchangeCollectionReference.trim() ? { transactionReference: exchangeCollectionReference.trim() } : {}),
+        }] : [],
+        refundPayments: exchangeRefundDue > 0 ? [{
+          paymentMethod: exchangeRefundMethod,
+          amount: Number(amount(exchangeRefundDue)),
+          ...(exchangeRefundMethod !== "CASH" ? { transactionReference: exchangeRefundReference.trim() } : {}),
+        }] : [],
+      };
+      setExchangePendingPayload(payload);
+    }
+    const payload = exchangePendingPayload || {
+      shiftId: Number(shift.id), reason: exchangeReason.trim(), idempotencyKey: exchangePendingKey.current,
+      returnItems: selectedItems.map((item) => ({
+        saleItemId: Number(item.id), quantity: Number(returnQuantities[item.id]),
+        restockDisposition: returnDispositions[item.id] || "RESTOCK",
+        dispositionReason: (returnDispositionReasons[item.id] || "").trim() || null,
+      })),
+      replacementItems: exchangeItems.map((item) => ({ productId: Number(item.productId), variantId: Number(item.variantId), quantity: Number(item.quantity) })),
+      replacementDiscountAmount: Number(amount(exchangeDiscountValue)),
+      collectionPayments: exchangeCollectionDue > 0 ? [{
+        paymentMethod: exchangeCollectionMethod, amount: Number(amount(exchangeCollectionDue)),
+        ...(exchangeCollectionMethod === "CASH" ? { tenderedAmount: Number(amount(exchangeCollectionTendered)) } : {}),
+        ...(exchangeCollectionReference.trim() ? { transactionReference: exchangeCollectionReference.trim() } : {}),
+      }] : [],
+      refundPayments: exchangeRefundDue > 0 ? [{
+        paymentMethod: exchangeRefundMethod, amount: Number(amount(exchangeRefundDue)),
+        ...(exchangeRefundMethod !== "CASH" ? { transactionReference: exchangeRefundReference.trim() } : {}),
+      }] : [],
+    };
+    setExchangeSaving(true);
+    setError("");
+    try {
+      const result = await apiRequest(`/admin/pos/sales/${returnSale.id}/exchange`, {
+        method: "POST", body: JSON.stringify(payload),
+      });
+      setReturnSale(null);
+      setExchangeMode(false);
+      setExchangeItems([]);
+      setExchangePendingPayload(null);
+      exchangePendingKey.current = null;
+      setExchangeRetryPending(false);
+      setNotice(`Exchange #${result.id} recorded. Credit applied: ${money(result.creditApplied)}. Collected: ${money(result.amountCollected)}. Refunded: ${money(result.actualRefund)}.`);
+      await Promise.all([loadCatalog(), loadCurrentShift(), loadHistory(historyPage)]);
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setExchangeRetryPending(uncertain);
+      if (!uncertain) { setExchangePendingPayload(null); exchangePendingKey.current = null; }
+      setError(`${err.message}${uncertain ? " Retry the exact same exchange request; its idempotency key is retained." : ""}`);
+    } finally { setExchangeSaving(false); }
   };
 
   const submitReturn = async () => {
@@ -2034,7 +2207,7 @@ export default function PosTerminal() {
           </div>
         </section>
       </div>}
-      {returnSale && (
+      {returnSale && !exchangeMode && (
         <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !returnSaving && !returnRetryPending) setReturnSale(null);
         }}>
