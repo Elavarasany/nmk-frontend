@@ -405,7 +405,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     finally { setLowStockLoading(false); }
   }, [locationId, onError]);
 
-  const loadMovementHistory = useCallback(async (page = movementPage) => {
+  const loadMovementHistory = useCallback(async (page = 0) => {
     if (!locationId) {
       setMovementRows([]);
       setMovementPage(0);
@@ -428,7 +428,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     } finally {
       setMovementLoading(false);
     }
-  }, [locationId, movementVariantId, movementPage, onError]);
+  }, [locationId, movementVariantId, onError]);
 
   const updateReorderLevel = async (variantId, currentLevel) => {
     const raw = reorderDrafts[variantId] ?? currentLevel;
@@ -576,7 +576,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
   useEffect(() => { loadStockCount(); }, [loadStockCount]);
   useEffect(() => { loadLowStock(); }, [loadLowStock]);
-  useEffect(() => { loadMovementHistory(0); }, [locationId, movementVariantId]);
+  useEffect(() => { loadMovementHistory(0); }, [loadMovementHistory]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
