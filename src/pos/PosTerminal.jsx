@@ -1645,7 +1645,7 @@ export default function PosTerminal() {
     }
     if (!voidPayload) {
       voidPending.current = voidPending.current || newIdempotencyKey();
-      setVoidPayload({
+      const nextPayload = {
         shiftId: shift.id,
         reason: voidReason.trim(),
         idempotencyKey: voidPending.current,
@@ -1654,7 +1654,9 @@ export default function PosTerminal() {
           amount: Number(payment.amount),
           transactionReference: payment.transactionReference.trim() || null,
         })),
-      });
+      };
+      setVoidPayload(nextPayload);
+      savePendingFinancialAction("nmk.pos.pending-void.v1", selectedHistorySale.id, nextPayload);
     }
     const payload = voidPayload || {
       shiftId: shift.id,
@@ -1677,6 +1679,8 @@ export default function PosTerminal() {
       setSelectedHistorySale(null);
       setVoidPayload(null);
       voidPending.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-void.v1");
+      pendingVoidRecord.current = null;
       setVoidRetry(false);
       setVoidPassword("");
       await Promise.all([loadHistory(historyPage), loadCatalog(), loadSalesReport()]);
@@ -1685,7 +1689,11 @@ export default function PosTerminal() {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setVoidRetry(uncertain);
       setVoidError(`${err.message}${uncertain ? " Retry the exact same void request; its idempotency key is retained." : ""}`);
-      if (!uncertain) { setVoidPayload(null); voidPending.current = null; }
+      if (!uncertain) {
+        setVoidPayload(null); voidPending.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-void.v1");
+        pendingVoidRecord.current = null;
+      }
     } finally { setVoidSaving(false); }
   };
 
@@ -2192,6 +2200,7 @@ export default function PosTerminal() {
         }] : [],
       };
       setExchangePendingPayload(payload);
+      savePendingFinancialAction("nmk.pos.pending-exchange.v1", returnSale.id, payload);
     }
     const payload = exchangePendingPayload || {
       shiftId: Number(shift.id), reason: exchangeReason.trim(), idempotencyKey: exchangePendingKey.current,
@@ -2224,6 +2233,8 @@ export default function PosTerminal() {
       setExchangeItems([]);
       setExchangePendingPayload(null);
       exchangePendingKey.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-exchange.v1");
+      pendingExchangeRecord.current = null;
       setExchangeRetryPending(false);
       setExchangePassword("");
       let invoiceLoaded = false;
@@ -2244,7 +2255,11 @@ export default function PosTerminal() {
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setExchangeRetryPending(uncertain);
-      if (!uncertain) { setExchangePendingPayload(null); exchangePendingKey.current = null; }
+      if (!uncertain) {
+        setExchangePendingPayload(null); exchangePendingKey.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-exchange.v1");
+        pendingExchangeRecord.current = null;
+      }
       setError(`${err.message}${uncertain ? " Retry the exact same exchange request; its idempotency key is retained." : ""}`);
     } finally { setExchangeSaving(false); }
   };
@@ -2299,6 +2314,7 @@ export default function PosTerminal() {
         }] : [],
       };
       setReturnPendingPayload(payload);
+      savePendingFinancialAction("nmk.pos.pending-return.v1", returnSale.id, payload);
     }
 
     const payload = returnPendingPayload || {
@@ -2330,6 +2346,8 @@ export default function PosTerminal() {
       setReturnSale(null);
       setReturnPendingPayload(null);
       returnPendingKey.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-return.v1");
+      pendingReturnRecord.current = null;
       setReturnRetryPending(false);
       setReturnPassword("");
       setNotice(`Return ${record.returnNumber} recorded. Refund total: ${money(record.refundTotal)}.`);
@@ -2340,6 +2358,8 @@ export default function PosTerminal() {
       if (!uncertain) {
         setReturnPendingPayload(null);
         returnPendingKey.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-return.v1");
+        pendingReturnRecord.current = null;
       }
       setError(`${err.message}${uncertain ? " Retry the exact same return request; its original idempotency key is retained." : ""}`);
     } finally {
