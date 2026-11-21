@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
+  Store,
   CalendarDays,
   Users,
   Megaphone,
@@ -37,7 +38,7 @@ import "./Admin.css";
    CONSTANTS
 ========================= */
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
 
 const ENDPOINTS = {
   products: `${API_BASE_URL}/admin/products`,
@@ -79,6 +80,7 @@ const MARKETING_MODAL = {
 
 const MENU_ITEMS = [
   { name: "Dashboard", icon: LayoutDashboard },
+  { name: "POS Terminal", icon: Store },
   { name: "Products", icon: Package },
   { name: "Orders", icon: ShoppingCart },
   { name: "Appointments", icon: CalendarDays },
@@ -5177,7 +5179,15 @@ export default function AdminDashboard() {
                     type="button"
                     className={`admin-nav-item ${isActive ? "active" : ""}`}
                     aria-current={isActive ? "page" : undefined}
-                    onClick={() => navigateTo(item.name)}
+                    onClick={() => {
+                      if (item.name === "POS Terminal") {
+                        setActivePage(item.name);
+                        setSidebarOpen(false);
+                        navigate("/admin/pos");
+                        return;
+                      }
+                      navigateTo(item.name);
+                    }}
                   >
                     <Icon size={19} aria-hidden="true" />
                     <span>{item.name}</span>

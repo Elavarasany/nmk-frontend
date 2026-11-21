@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import "./Admin.css";
 
-const API_URL = "http://localhost:8080/api/admin/auth/login";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const API_URL = `${API_BASE_URL}/admin/auth/login`;
 
 export default function AdminLogin() {
     const navigate = useNavigate();
