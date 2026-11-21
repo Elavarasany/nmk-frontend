@@ -1150,3 +1150,8 @@
 @media (max-width: 620px) {
   .pos-procurement-history-record { grid-template-columns: 1fr; }
 }
+
+.pos-procurement-cost-report { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e9e2d8; }
+.pos-procurement-cost-report > .pos-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.pos-procurement-cost-report > .pos-panel-heading p { max-width: 760px; }
+.pos-procurement-cost-report .pos-history-table-wrap { margin-top: 14px; }

@@ -1170,6 +1170,8 @@ export default function PosTerminal() {
   const [reportLoading, setReportLoading] = useState(false);
   const [inventoryReport, setInventoryReport] = useState(null);
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
+  const [procurementCostReport, setProcurementCostReport] = useState(null);
+  const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
@@ -1418,6 +1420,17 @@ export default function PosTerminal() {
     } catch (err) { setError(err.message); }
     finally { setInventoryReportLoading(false); }
   }, [locationId]);
+
+  const loadProcurementCostReport = useCallback(async () => {
+    if (!locationId || !reportFrom || !reportTo || reportTo < reportFrom) return;
+    setProcurementCostReportLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest("/admin/procurement/cost-report?locationId=" + encodeURIComponent(locationId) + "&from=" + encodeURIComponent(reportFrom) + "&to=" + encodeURIComponent(reportTo));
+      setProcurementCostReport(data);
+    } catch (err) { setError(err.message); }
+    finally { setProcurementCostReportLoading(false); }
+  }, [locationId, reportFrom, reportTo]);
 
   const openVoidDialog = (sale) => {
     if (selectedSaleReturns === null) {
@@ -2337,6 +2350,37 @@ export default function PosTerminal() {
                     </tbody></table></div>
                   </section>
                 </>}
+            <section className="pos-procurement-cost-report">
+              <div className="pos-panel-heading">
+                <div><h2>Procurement cost report</h2><p>Recorded goods receipts less supplier returns. This is not inventory valuation, supplier payments, COGS or profit.</p></div>
+                <button type="button" className="pos-button secondary compact" onClick={loadProcurementCostReport} disabled={procurementCostReportLoading}>
+                  <RefreshCw size={15} className={procurementCostReportLoading ? "pos-spin" : ""} /> Refresh
+                </button>
+              </div>
+              <div className="pos-report-filters">
+                <label>From<input type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} /></label>
+                <label>To<input type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} /></label>
+                <button type="button" className="pos-button primary" onClick={loadProcurementCostReport} disabled={procurementCostReportLoading || !reportFrom || !reportTo || reportTo < reportFrom}>Run cost report</button>
+              </div>
+              {procurementCostReportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Calculating recorded procurement costs…</span></div>
+                : !procurementCostReport ? <div className="pos-empty-state"><Package /><strong>No procurement cost report loaded</strong><span>Choose a date range and run the report.</span></div>
+                  : <>
+                    <div className="pos-report-summary">
+                      <article><span>Received units</span><strong>{procurementCostReport.receivedQuantity}</strong></article>
+                      <article><span>Returned units</span><strong>{procurementCostReport.returnedQuantity}</strong></article>
+                      <article><span>Recorded received cost</span><strong>{money(procurementCostReport.receivedCost)}</strong></article>
+                      <article><span>Recorded supplier returns</span><strong>{money(procurementCostReport.returnedCost)}</strong></article>
+                      <article><span>Net recorded procurement cost</span><strong>{money(procurementCostReport.netRecordedProcurementCost)}</strong></article>
+                    </div>
+                    <div className="pos-history-table-wrap"><table className="pos-history-table">
+                      <thead><tr><th>Type</th><th>Reference</th><th>Purchase order</th><th>Supplier</th><th>SKU</th><th>Qty</th><th>Unit cost</th><th>Total cost</th><th>Recorded by</th><th>Date</th></tr></thead>
+                      <tbody>{(procurementCostReport.entries || []).map((row, index) => <tr key={row.type + "-" + row.reference + "-" + row.sku + "-" + index}>
+                        <td>{row.type === "RECEIVED" ? "Goods received" : "Supplier return"}</td><td><strong>{row.reference}</strong></td><td>{row.purchaseOrderNumber}</td><td>{row.supplierName}</td><td>{row.sku}</td>
+                        <td>{row.quantity}</td><td>{money(row.unitCost)}</td><td><strong>{money(row.totalCost)}</strong></td><td>{row.recordedBy}</td><td>{row.createdAt ? new Date(row.createdAt).toLocaleString("en-IN") : "—"}</td>
+                      </tr>)}</tbody>
+                    </table></div>
+                  </>}
+            </section>
           </section>
         ) : (
           <section className="pos-history-panel">
