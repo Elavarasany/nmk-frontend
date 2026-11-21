@@ -104,3 +104,12 @@ Managers and administrators can start a physical stock count from the Inventory 
 The POS catalogue exposes the location freeze state so the cashier terminal warns and disables checkout while a count is active. A failed post leaves the location frozen; retry the post or cancel the session after reviewing it. Do not manually clear the location lock in the database.
 
 Backend migration: `009-create-stock-count-sessions.sql`. It is manual and has not been run against any live/client database.
+
+
+## Supplier procurement (backend API foundation)
+
+The backend now supports supplier records, DRAFT purchase orders, order submission, partial/full goods receipts and supplier returns. Goods receipt creates stock only after the receipt is recorded; supplier returns reduce stock and cannot remove reserved units. Both flows use idempotency keys and append-only stock movements. The current POS screen does not yet expose the procurement workflow as a dedicated user interface.
+
+Supplier credit notes, accounts payable, GST/landed-cost accounting and automatic supplier payments are not included. These require the client's accounting policies and accountant-approved tax rules.
+
+Backend migration: `010-create-procurement.sql`. It is manual and has not been run against any live/client database.
