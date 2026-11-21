@@ -43,7 +43,7 @@ export default function AdminLogin() {
 
             sessionStorage.setItem("adminToken", data.token);
             sessionStorage.setItem("adminUsername", data.username);
-            sessionStorage.setItem("adminRole", data.role || "ADMIN");
+            sessionStorage.setItem("adminRole", data.role || "CASHIER");
 
             navigate(data.role && data.role !== "ADMIN" ? "/admin/pos" : "/admin/dashboard");
 
