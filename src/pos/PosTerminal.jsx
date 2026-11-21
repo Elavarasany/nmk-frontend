@@ -1365,6 +1365,7 @@ export default function PosTerminal() {
   const [openingFloat, setOpeningFloat] = useState("0.00");
   const [closingCashCount, setClosingCashCount] = useState("");
   const [closingReason, setClosingReason] = useState("");
+  const [pendingClosePayload, setPendingClosePayload] = useState(() => readPendingOperation("nmk.pos.pending-close-shift.v1", (p) => p?.shiftId && p?.closingCashCount != null));
   const [cashMovementType, setCashMovementType] = useState("CASH_IN");
   const [cashMovementAmount, setCashMovementAmount] = useState("");
   const [cashMovementReason, setCashMovementReason] = useState("");
@@ -1453,6 +1454,7 @@ export default function PosTerminal() {
   const pendingExchangeRecord = useRef(readPendingFinancialAction("nmk.pos.pending-exchange.v1"));
   const pendingKey = useRef(pendingPayload?.idempotencyKey || null);
   const openShiftPayload = useRef(readPendingOperation("nmk.pos.pending-open-shift.v1", (p) => p?.idempotencyKey && p?.registerId));
+  const closeShiftPayload = useRef(readPendingOperation("nmk.pos.pending-close-shift.v1", (p) => p?.shiftId && p?.closingCashCount != null));
   const cashMovementPayload = useRef(readPendingOperation("nmk.pos.pending-cash-movement.v1", (p) => p?.idempotencyKey && p?.shiftId && p?.amount > 0));
   const searchRef = useRef(null);
 
@@ -1461,6 +1463,8 @@ export default function PosTerminal() {
       setNotice("An unfinished shift-opening request was recovered. Retry it to confirm the original request; do not create another shift.");
     } else if (cashMovementPayload.current) {
       setNotice("An unfinished drawer cash movement was recovered. Retry the saved movement to confirm its status; do not enter it again.");
+    } else if (closeShiftPayload.current) {
+      setNotice("An unfinished shift-close request was recovered. Retry the exact saved cash count to confirm closure; do not open another shift.");
     }
   }, []);
 
@@ -1631,31 +1635,51 @@ export default function PosTerminal() {
   };
 
   const closeShift = async () => {
-    if (!shift?.id) return;
-    const counted = Number(closingCashCount);
-    if (!Number.isFinite(counted) || counted < 0) {
-      setError("Enter the actual cash counted in the drawer.");
-      return;
+    if (!closeShiftPayload.current) {
+      if (!shift?.id || shift.status !== "OPEN") return;
+      const counted = Number(closingCashCount);
+      if (!Number.isFinite(counted) || counted < 0) {
+        setError("Enter the actual cash counted in the drawer.");
+        return;
+      }
+      const variance = Number((counted - Number(shift.expectedCash || 0)).toFixed(2));
+      if (Math.abs(variance) > 0.001 && !closingReason.trim()) {
+        setError("Explain the cash difference before closing the shift.");
+        return;
+      }
+      closeShiftPayload.current = {
+        shiftId: shift.id,
+        closingCashCount: Number(amount(counted)),
+        reason: closingReason.trim() || null,
+      };
+      setPendingClosePayload(closeShiftPayload.current);
+      savePendingOperation("nmk.pos.pending-close-shift.v1", closeShiftPayload.current);
     }
-    const variance = Number((counted - Number(shift.expectedCash || 0)).toFixed(2));
-    if (Math.abs(variance) > 0.001 && !closingReason.trim()) {
-      setError("Explain the cash difference before closing the shift.");
-      return;
-    }
+    const payload = closeShiftPayload.current;
     setShiftSaving(true);
     setError("");
     try {
-      const closed = await apiRequest(`/admin/pos/shifts/${shift.id}/close`, {
+      const closed = await apiRequest(`/admin/pos/shifts/${payload.shiftId}/close`, {
         method: "POST",
         body: JSON.stringify({
-          closingCashCount: Number(amount(counted)),
-          reason: closingReason.trim() || null,
+          closingCashCount: payload.closingCashCount,
+          reason: payload.reason,
         }),
       });
+      closeShiftPayload.current = null;
+      setPendingClosePayload(null);
+      sessionStorage.removeItem("nmk.pos.pending-close-shift.v1");
       setShift(closed);
       setNotice(`Shift closed. Cash variance: ${money(closed.cashVariance)}.`);
     } catch (err) {
-      setError(err.message);
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      if (!uncertain) {
+        closeShiftPayload.current = null;
+        setPendingClosePayload(null);
+        sessionStorage.removeItem("nmk.pos.pending-close-shift.v1");
+      }
+      setError(`${err.message}${uncertain ? " Retry the exact same shift-close request; its cash count and reason are retained." : ""}`);
+      if (uncertain) await loadCurrentShift();
     } finally {
       setShiftSaving(false);
     }
@@ -2547,7 +2571,15 @@ export default function PosTerminal() {
                 {registers.length ? registers.map((register) => <option key={register.id} value={register.id}>{register.registerCode} · {register.name}</option>) : <option value="">No register configured</option>}
               </select>
             </label>
-            {(!shift?.id || shift.status === "CLOSED") ? (
+            {pendingClosePayload ? (
+              <div className="pos-pending-operation">
+                <strong>Shift closure needs confirmation</strong>
+                <p>Saved cash count: {money(pendingClosePayload.closingCashCount)}. Retry sends the exact same close request.</p>
+                <button type="button" className="pos-button primary" onClick={closeShift} disabled={shiftSaving || shiftLoading}>
+                  {shiftSaving ? "Confirming…" : "Retry shift close"}
+                </button>
+              </div>
+            ) : (!shift?.id || shift.status === "CLOSED") ? (
               <>
                 <label>Opening cash float (₹)
                   <input type="number" min="0" step="0.01" value={openingFloat} onChange={(event) => setOpeningFloat(event.target.value)} disabled={shiftSaving || !registerId} />
