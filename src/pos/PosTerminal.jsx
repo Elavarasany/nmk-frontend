@@ -17,6 +17,26 @@ const amount = (value) => Number(value || 0).toFixed(2);
 const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.() ||
   `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const PENDING_CHECKOUT_STORAGE_KEY = "nmk.pos.pending-checkout.v1";
+function readPendingCheckout() {
+  try {
+    const stored = sessionStorage.getItem(PENDING_CHECKOUT_STORAGE_KEY);
+    if (!stored) return null;
+    const record = JSON.parse(stored);
+    const username = sessionStorage.getItem("adminUsername") || "";
+    if (!record?.payload?.idempotencyKey || !record?.payload?.shiftId ||
+        !Array.isArray(record.payload.items) || !Array.isArray(record.payload.payments)) return null;
+    if (!username || record.username !== username) {
+      sessionStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
+      return null;
+    }
+    return record.payload;
+  } catch {
+    sessionStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
+    return null;
+  }
+}
+
 async function authorizePosAction(action, password) {
   if (!password?.trim()) throw new Error("Enter your staff password to authorize this action.");
   const result = await apiRequest("/admin/auth/authorize-action", {
@@ -1192,7 +1212,7 @@ export default function PosTerminal() {
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const canApplyDiscount = staffRole === "ADMIN" || staffRole === "MANAGER";
   const [locations, setLocations] = useState([]);
-  const [locationId, setLocationId] = useState("");
+  const [locationId, setLocationId] = useState(() => String(readPendingCheckout()?.locationId || ""));
   const [locationStockCountLocked, setLocationStockCountLocked] = useState(false);
   const [registers, setRegisters] = useState([]);
   const [registerId, setRegisterId] = useState("");
@@ -1220,8 +1240,8 @@ export default function PosTerminal() {
   const [discount, setDiscount] = useState("0.00");
   const [payments, setPayments] = useState([{ paymentMethod: "CASH", amount: "0.00", tenderedAmount: "0.00", transactionReference: "" }]);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [retryPending, setRetryPending] = useState(false);
-  const [pendingPayload, setPendingPayload] = useState(null);
+  const [pendingPayload, setPendingPayload] = useState(() => readPendingCheckout());
+  const [retryPending, setRetryPending] = useState(() => Boolean(readPendingCheckout()));
   const [history, setHistory] = useState([]);
   const [historyPage, setHistoryPage] = useState(0);
   const [historyPages, setHistoryPages] = useState(0);
@@ -1285,7 +1305,7 @@ export default function PosTerminal() {
   const [exchangeRetryPending, setExchangeRetryPending] = useState(false);
   const [exchangePendingPayload, setExchangePendingPayload] = useState(null);
   const exchangePendingKey = useRef(null);
-  const pendingKey = useRef(null);
+  const pendingKey = useRef(pendingPayload?.idempotencyKey || null);
   const openShiftPayload = useRef(null);
   const cashMovementPayload = useRef(null);
   const searchRef = useRef(null);
@@ -1706,6 +1726,38 @@ export default function PosTerminal() {
   [catalog]);
 
   useEffect(() => {
+    if (!pendingPayload || !catalog.length || cart.length) return;
+    const restoredItems = pendingPayload.items.map((saved) => {
+      for (const product of catalog) {
+        const variant = (product.variants || []).find((item) => Number(item.variantId) === Number(saved.variantId));
+        if (variant) return {
+          productId: product.productId, variantId: variant.variantId,
+          productName: product.name, variantName: variant.variantName, sku: variant.sku,
+          imageUrl: product.imageUrl, unitPrice: Number(variant.sellingPrice),
+          quantity: Number(saved.quantity), availableQuantity: Number(variant.availableQuantity),
+        };
+      }
+      return null;
+    });
+    if (restoredItems.some((item) => !item)) {
+      setError("An interrupted checkout was recovered, but one or more items are no longer in this location's catalog. Do not create a replacement sale; contact a manager to reconcile the original transaction.");
+      return;
+    }
+    setCart(restoredItems);
+    setCustomerName(pendingPayload.customerName || "");
+    setCustomerPhone(pendingPayload.customerPhone || "");
+    setDiscount(amount(pendingPayload.discountAmount));
+    setPayments(pendingPayload.payments.map((payment) => ({
+      paymentMethod: payment.paymentMethod,
+      amount: amount(payment.amount),
+      tenderedAmount: payment.paymentMethod === "CASH" ? amount(payment.tenderedAmount) : "",
+      transactionReference: payment.transactionReference || "",
+    })));
+    setRetryPending(true);
+    setNotice("An unfinished checkout was recovered from this browser tab. Verify the details and retry the exact same request.");
+  }, [catalog, pendingPayload, cart.length]);
+
+  useEffect(() => {
     if (payments.length === 1) {
       setPayments((current) => current.length === 1 ? [{
         ...current[0],
@@ -1780,6 +1832,7 @@ export default function PosTerminal() {
     setDiscount("0.00");
     setPayments([{ paymentMethod: "CASH", amount: "0.00", tenderedAmount: "0.00", transactionReference: "" }]);
     pendingKey.current = null;
+    sessionStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
     setPendingPayload(null);
     setRetryPending(false);
   };
@@ -1787,21 +1840,22 @@ export default function PosTerminal() {
   const completeSale = async () => {
     setError("");
     setNotice("");
-    if (locationStockCountLocked) { setError("A physical stock count is in progress at this location. Sales are temporarily frozen."); return; }
-    if (!shift?.id || shift.status !== "OPEN") { setError("Open your cashier shift before completing a sale."); return; }
-    if (!cart.length) { setError("Add at least one item before checkout."); return; }
-    if (discountValue > subtotal) { setError("Discount cannot exceed the subtotal."); return; }
-    if (Math.abs(paymentTotal - grandTotal) > 0.001) {
-      setError("Payment amounts must add up exactly to the grand total."); return;
+    if (!pendingPayload) {
+      if (locationStockCountLocked) { setError("A physical stock count is in progress at this location. Sales are temporarily frozen."); return; }
+      if (!shift?.id || shift.status !== "OPEN") { setError("Open your cashier shift before completing a sale."); return; }
+      if (!cart.length) { setError("Add at least one item before checkout."); return; }
+      if (discountValue > subtotal) { setError("Discount cannot exceed the subtotal."); return; }
+      if (Math.abs(paymentTotal - grandTotal) > 0.001) {
+        setError("Payment amounts must add up exactly to the grand total."); return;
+      }
+      if (payments.some((p) => p.paymentMethod === "CASH" && (Number(p.tenderedAmount) || 0) < (Number(p.amount) || 0))) {
+        setError("Cash received must be at least the cash payment amount."); return;
+      }
+      if (payments.some((p) => p.paymentMethod !== "CASH" && p.tenderedAmount !== "" && p.tenderedAmount != null)) {
+        setError("Tendered amount is only valid for cash payments."); return;
+      }
+      if (!pendingKey.current) pendingKey.current = newIdempotencyKey();
     }
-    if (payments.some((p) => p.paymentMethod === "CASH" && (Number(p.tenderedAmount) || 0) < (Number(p.amount) || 0))) {
-      setError("Cash received must be at least the cash payment amount."); return;
-    }
-    if (payments.some((p) => p.paymentMethod !== "CASH" && p.tenderedAmount !== "" && p.tenderedAmount != null)) {
-      setError("Tendered amount is only valid for cash payments."); return;
-    }
-
-    if (!pendingKey.current) pendingKey.current = newIdempotencyKey();
     const body = pendingPayload || {
       locationId: Number(locationId),
       shiftId: Number(shift.id),
@@ -1820,11 +1874,16 @@ export default function PosTerminal() {
       })),
     };
     setPendingPayload(body);
+    sessionStorage.setItem(PENDING_CHECKOUT_STORAGE_KEY, JSON.stringify({
+      username: sessionStorage.getItem("adminUsername") || "",
+      payload: body,
+    }));
 
     setCheckoutLoading(true);
     try {
       const sale = await apiRequest("/admin/pos/checkout", { method: "POST", body: JSON.stringify(body) });
       pendingKey.current = null;
+      sessionStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
       setPendingPayload(null);
       setRetryPending(false);
       setReceipt(sale);
@@ -1836,6 +1895,7 @@ export default function PosTerminal() {
         setRetryPending(true);
       } else {
         pendingKey.current = null;
+        sessionStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
         setPendingPayload(null);
         setRetryPending(false);
       }
