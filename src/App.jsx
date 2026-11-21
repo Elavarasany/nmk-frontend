@@ -21,7 +21,7 @@ const DASHBOARD_PATH = "/admin/dashboard";
 const isAdminAuthenticated = () =>
   Boolean(sessionStorage.getItem(TOKEN_KEY));
 
-function ProtectedAdminRoute({ children }) {
+function ProtectedAdminRoute({ children, adminOnly = false }) {
   const location = useLocation();
 
   if (!isAdminAuthenticated()) {
@@ -32,6 +32,10 @@ function ProtectedAdminRoute({ children }) {
         state={{ from: location.pathname + location.search }}
       />
     );
+  }
+
+  if (adminOnly && sessionStorage.getItem("adminRole") !== "ADMIN") {
+    return <Navigate to="/admin/pos" replace />;
   }
 
   return children;
@@ -85,7 +89,7 @@ export default function App() {
           <Route
             path={DASHBOARD_PATH}
             element={
-              <ProtectedAdminRoute>
+              <ProtectedAdminRoute adminOnly>
                 <AdminDashboard />
               </ProtectedAdminRoute>
             }
