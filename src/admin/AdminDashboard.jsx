@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
+  Store,
   CalendarDays,
   Users,
   Megaphone,
@@ -29,6 +30,7 @@ import {
   Printer,
   Info,
   Clock,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
@@ -37,7 +39,7 @@ import "./Admin.css";
    CONSTANTS
 ========================= */
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || (import.meta.env.DEV ? "http://localhost:8080/api" : "");
 
 const ENDPOINTS = {
   products: `${API_BASE_URL}/admin/products`,
@@ -79,10 +81,12 @@ const MARKETING_MODAL = {
 
 const MENU_ITEMS = [
   { name: "Dashboard", icon: LayoutDashboard },
+  { name: "POS Terminal", icon: Store },
   { name: "Products", icon: Package },
   { name: "Orders", icon: ShoppingCart },
   { name: "Appointments", icon: CalendarDays },
   { name: "Customers", icon: Users },
+  { name: "Staff", icon: ShieldCheck },
   { name: "Marketing", icon: Megaphone },
   { name: "Settings", icon: Settings },
 ];
@@ -1582,7 +1586,7 @@ function DashboardPage({ api, products, orders, appointments, refreshing, onRefr
                 <th scope="col">Product</th>
                 <th scope="col">Category</th>
                 <th scope="col">Price</th>
-                <th scope="col">Stock</th>
+                <th scope="col">Legacy stock</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -2243,7 +2247,7 @@ const handleProductCsvImport = async (e) => {
                     {formatINR(product.price, true)}
                   </td>
 
-                  <td data-label="Stock">
+                  <td data-label="Legacy stock">
                     {product.stockQuantity ?? 0}
                   </td>
 
@@ -2352,7 +2356,7 @@ const handleProductCsvImport = async (e) => {
                 />
               </FormGroup>
 
-              <FormGroup id="product-stock" label="Stock Quantity" required>
+              <FormGroup id="product-stock" label="Legacy Stock Quantity (not used for POS availability)" required>
                 <input
                   id="product-stock"
                   type="number"
@@ -2361,7 +2365,7 @@ const handleProductCsvImport = async (e) => {
                   step="1"
                   value={form.stockQuantity}
                   onChange={handleChange}
-                  placeholder="Enter stock quantity"
+                  placeholder="Legacy product field only"
                   required
                 />
               </FormGroup>
@@ -4881,6 +4885,216 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
   );
 }
 
+function StaffManagementPage({ api, onNotice }) {
+  const confirm = useConfirm();
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({ username: "", password: "", role: "CASHIER" });
+
+  const loadStaff = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api.getJson(`${API_BASE_URL}/admin/staff`, "Unable to load staff accounts.");
+      setStaff(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Unable to load staff accounts.");
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+
+  const createStaff = async (event) => {
+    event.preventDefault();
+    const username = form.username.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,50}$/.test(username)) {
+      setError("Username must be 3–50 characters and use only letters, numbers, dots, underscores or hyphens.");
+      return;
+    }
+    if (form.password.length < 12 || new TextEncoder().encode(form.password).length > 72) {
+      setError("Password must be at least 12 characters and no more than 72 UTF-8 bytes.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff`,
+        method: "POST",
+        payload: { username, password: form.password, role: form.role },
+        fallbackMessage: "Unable to create staff account.",
+      });
+      if (saved) {
+        setForm({ username: "", password: "", role: "CASHIER" });
+        await loadStaff();
+        onNotice("Staff account created.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to create staff account.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeRole = async (account, role) => {
+    if (role === account.role) return;
+    const approved = await confirm({
+      title: "Change staff role",
+      message: `Change ${account.username} from ${account.role} to ${role}?`,
+      confirmLabel: "Change role",
+    });
+    if (!approved) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/role`,
+        method: "PATCH",
+        payload: { role },
+        fallbackMessage: "Unable to change staff role.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice("Staff role updated.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to change staff role.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeStatus = async (account) => {
+    const enabled = !account.enabled;
+    const approved = await confirm({
+      title: enabled ? "Enable staff account" : "Disable staff account",
+      message: enabled
+        ? `Allow ${account.username} to sign in again?`
+        : `Disable ${account.username}? Their existing JWT will stop working immediately.`,
+      confirmLabel: enabled ? "Enable account" : "Disable account",
+      danger: !enabled,
+    });
+    if (!approved) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/status`,
+        method: "PATCH",
+        payload: { enabled },
+        fallbackMessage: "Unable to update staff status.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice(enabled ? "Staff account enabled." : "Staff account disabled.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to update staff status.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="admin-content">
+      <PageHeading
+        title="Staff & permissions"
+        description="Create cashier and manager logins. Existing administrator accounts remain administrators."
+        action={<RefreshButton onClick={loadStaff} loading={loading} />}
+      />
+      <ErrorMessage>{error}</ErrorMessage>
+
+      <div className="admin-table-card" style={{ marginBottom: 22 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Create staff account</h3>
+            <p>Passwords are stored as BCrypt hashes and are never shown again.</p>
+          </div>
+        </div>
+        <form className="admin-form-grid" style={{ padding: "0 22px 22px" }} onSubmit={createStaff}>
+          <FormGroup id="staff-username" label="Username" required>
+            <input id="staff-username" autoComplete="off" value={form.username}
+              onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
+              maxLength={50} required />
+          </FormGroup>
+          <FormGroup id="staff-password" label="Temporary password (12+ characters)" required>
+            <input id="staff-password" type="password" autoComplete="new-password"
+              value={form.password}
+              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+              minLength={12} required />
+          </FormGroup>
+          <FormGroup id="staff-role" label="Role" required>
+            <select id="staff-role" value={form.role}
+              onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
+              <option value="CASHIER">Cashier</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Administrator</option>
+            </select>
+          </FormGroup>
+          <div className="admin-form-actions">
+            <button type="submit" className="admin-primary-button" disabled={saving}>
+              {saving ? "Saving…" : "Create account"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Staff accounts</h3>
+            <p>{staff.length} account{staff.length === 1 ? "" : "s"} · disabled accounts cannot use existing tokens</p>
+          </div>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={5}>Loading staff accounts…</EmptyRow>
+                : staff.length === 0 ? <EmptyRow colSpan={5}>No staff accounts found.</EmptyRow>
+                  : staff.map((account) => (
+                    <tr key={account.id}>
+                      <td><strong>{account.username}</strong></td>
+                      <td>
+                        <select aria-label={`Role for ${account.username}`} value={account.role}
+                          disabled={saving || account.username === sessionStorage.getItem("adminUsername")}
+                          onChange={(event) => changeRole(account, event.target.value)}>
+                          <option value="ADMIN">Administrator</option>
+                          <option value="MANAGER">Manager</option>
+                          <option value="CASHIER">Cashier</option>
+                        </select>
+                      </td>
+                      <td><span className={account.enabled ? "admin-status available" : "admin-status inactive"}>
+                        {account.enabled ? "Active" : "Disabled"}
+                      </span></td>
+                      <td>{formatDate(account.createdAt)}</td>
+                      <td>
+                        <button type="button" className="admin-secondary-button"
+                          disabled={saving || account.username === sessionStorage.getItem("adminUsername")}
+                          onClick={() => changeStatus(account)}>
+                          {account.enabled ? "Disable" : "Enable"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        Cashiers can create sales only. Managers can use POS inventory and sales history. Only administrators can manage staff and the rest of the admin portal.
+      </p>
+    </section>
+  );
+}
+
 /* =========================
    ROOT COMPONENT
    Owns the session, shared data, navigation, notices, preferences and confirmations.
@@ -4890,6 +5104,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const token = sessionStorage.getItem("adminToken");
   const username = sessionStorage.getItem("adminUsername") || "Admin";
+  const role = sessionStorage.getItem("adminRole") || "ADMIN";
+  const isAdmin = role === "ADMIN";
 
   const [activePage, setActivePage] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -4943,6 +5159,7 @@ export default function AdminDashboard() {
   const endSession = useCallback(() => {
     sessionStorage.removeItem("adminToken");
     sessionStorage.removeItem("adminUsername");
+    sessionStorage.removeItem("adminRole");
     navigate("/admin", { replace: true });
   }, [navigate]);
 
@@ -5124,6 +5341,8 @@ export default function AdminDashboard() {
             onReloadImages={reloadImages}
           />
         );
+      case "Staff":
+        return isAdmin ? <StaffManagementPage api={api} onNotice={setNotice} /> : null;
       case "Settings":
         return (
           <SettingsPage
@@ -5167,7 +5386,7 @@ export default function AdminDashboard() {
             <div className="admin-menu-label">MAIN MENU</div>
 
             <nav className="admin-navigation" aria-label="Admin">
-              {MENU_ITEMS.map((item) => {
+              {MENU_ITEMS.filter((item) => item.name !== "Staff" || isAdmin).map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.name;
 
@@ -5177,7 +5396,15 @@ export default function AdminDashboard() {
                     type="button"
                     className={`admin-nav-item ${isActive ? "active" : ""}`}
                     aria-current={isActive ? "page" : undefined}
-                    onClick={() => navigateTo(item.name)}
+                    onClick={() => {
+                      if (item.name === "POS Terminal") {
+                        setActivePage(item.name);
+                        setSidebarOpen(false);
+                        navigate("/admin/pos");
+                        return;
+                      }
+                      navigateTo(item.name);
+                    }}
                   >
                     <Icon size={19} aria-hidden="true" />
                     <span>{item.name}</span>

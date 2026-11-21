@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import "./Admin.css";
 
-const API_URL = "http://localhost:8080/api/admin/auth/login";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || (import.meta.env.DEV ? "http://localhost:8080/api" : "");
+const API_URL = `${API_BASE_URL}/admin/auth/login`;
 
 export default function AdminLogin() {
     const navigate = useNavigate();
@@ -26,6 +27,9 @@ export default function AdminLogin() {
         setLoading(true);
 
         try {
+            if (!API_BASE_URL) {
+                throw new Error("Backend API is not configured. Set VITE_API_BASE_URL to your deployed backend URL ending in /api and rebuild the frontend.");
+            }
             const response = await fetch(API_URL, {
                 method: "POST",
                 headers: {
@@ -40,10 +44,12 @@ export default function AdminLogin() {
                 throw new Error(data.message || "Login failed");
             }
 
+            const role = data.role || "CASHIER";
             sessionStorage.setItem("adminToken", data.token);
             sessionStorage.setItem("adminUsername", data.username);
+            sessionStorage.setItem("adminRole", role);
 
-            navigate("/admin/dashboard");
+            navigate(role === "ADMIN" ? "/admin/dashboard" : "/admin/pos");
 
         } catch (err) {
             setError(err.message || "Unable to connect to server");
