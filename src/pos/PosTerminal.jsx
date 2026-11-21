@@ -60,6 +60,31 @@ function savePendingOperation(key, payload) {
   }));
 }
 
+function readPendingFinancialAction(key) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const record = JSON.parse(raw);
+    const username = sessionStorage.getItem("adminUsername") || "";
+    if (!username || record?.username !== username || !Number.isInteger(Number(record.saleId)) ||
+        !record?.payload?.idempotencyKey) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return { saleId: Number(record.saleId), payload: record.payload };
+  } catch {
+    sessionStorage.removeItem(key);
+    return null;
+  }
+}
+function savePendingFinancialAction(key, saleId, payload) {
+  sessionStorage.setItem(key, JSON.stringify({
+    username: sessionStorage.getItem("adminUsername") || "",
+    saleId: Number(saleId),
+    payload,
+  }));
+}
+
 async function authorizePosAction(action, password) {
   if (!password?.trim()) throw new Error("Enter your staff password to authorize this action.");
   const result = await apiRequest("/admin/auth/authorize-action", {
@@ -1296,9 +1321,10 @@ export default function PosTerminal() {
   const [voidRefunds, setVoidRefunds] = useState([]);
   const [voidSaving, setVoidSaving] = useState(false);
   const [voidRetry, setVoidRetry] = useState(false);
-  const [voidPayload, setVoidPayload] = useState(null);
+  const [voidPayload, setVoidPayload] = useState(() => readPendingFinancialAction("nmk.pos.pending-void.v1")?.payload || null);
   const [voidError, setVoidError] = useState("");
-  const voidPending = useRef(null);
+  const voidPending = useRef(readPendingFinancialAction("nmk.pos.pending-void.v1")?.payload?.idempotencyKey || null);
+  const pendingVoidRecord = useRef(readPendingFinancialAction("nmk.pos.pending-void.v1"));
   const [returnSale, setReturnSale] = useState(null);
   const [saleReturns, setSaleReturns] = useState([]);
   const [returnReason, setReturnReason] = useState("");
@@ -1311,8 +1337,9 @@ export default function PosTerminal() {
   const [returnLoading, setReturnLoading] = useState(false);
   const [returnSaving, setReturnSaving] = useState(false);
   const [returnRetryPending, setReturnRetryPending] = useState(false);
-  const [returnPendingPayload, setReturnPendingPayload] = useState(null);
-  const returnPendingKey = useRef(null);
+  const [returnPendingPayload, setReturnPendingPayload] = useState(() => readPendingFinancialAction("nmk.pos.pending-return.v1")?.payload || null);
+  const returnPendingKey = useRef(readPendingFinancialAction("nmk.pos.pending-return.v1")?.payload?.idempotencyKey || null);
+  const pendingReturnRecord = useRef(readPendingFinancialAction("nmk.pos.pending-return.v1"));
   const [exchangeMode, setExchangeMode] = useState(false);
   const [exchangeReason, setExchangeReason] = useState("");
   const [exchangePassword, setExchangePassword] = useState("");
@@ -1326,8 +1353,9 @@ export default function PosTerminal() {
   const [exchangeRefundReference, setExchangeRefundReference] = useState("");
   const [exchangeSaving, setExchangeSaving] = useState(false);
   const [exchangeRetryPending, setExchangeRetryPending] = useState(false);
-  const [exchangePendingPayload, setExchangePendingPayload] = useState(null);
-  const exchangePendingKey = useRef(null);
+  const [exchangePendingPayload, setExchangePendingPayload] = useState(() => readPendingFinancialAction("nmk.pos.pending-exchange.v1")?.payload || null);
+  const exchangePendingKey = useRef(readPendingFinancialAction("nmk.pos.pending-exchange.v1")?.payload?.idempotencyKey || null);
+  const pendingExchangeRecord = useRef(readPendingFinancialAction("nmk.pos.pending-exchange.v1"));
   const pendingKey = useRef(pendingPayload?.idempotencyKey || null);
   const openShiftPayload = useRef(readPendingOperation("nmk.pos.pending-open-shift.v1", (p) => p?.idempotencyKey && p?.registerId));
   const cashMovementPayload = useRef(readPendingOperation("nmk.pos.pending-cash-movement.v1", (p) => p?.idempotencyKey && p?.shiftId && p?.amount > 0));
