@@ -114,6 +114,49 @@ function ReceiptView({ sale, onClose }) {
 }
 
 
+
+function ProcurementHistory({ purchaseOrderId }) {
+  const [kind, setKind] = useState("");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const openHistory = async (nextKind) => {
+    if (kind === nextKind) { setKind(""); setRows([]); setError(""); return; }
+    setKind(nextKind); setLoading(true); setError(""); setRows([]);
+    try {
+      const suffix = nextKind === "receipts" ? "receipts" : "supplier-returns";
+      const data = await apiRequest("/admin/procurement/purchase-orders/" + purchaseOrderId + "/" + suffix);
+      setRows(Array.isArray(data) ? data : []);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="pos-procurement-history">
+      <div className="pos-procurement-history-actions">
+        <button type="button" className="pos-button secondary compact" onClick={() => openHistory("receipts")}>Receipt history</button>
+        <button type="button" className="pos-button secondary compact" onClick={() => openHistory("returns")}>Supplier return history</button>
+      </div>
+      {kind && <section className="pos-procurement-history-panel">
+        <div className="pos-panel-heading"><h4>{kind === "receipts" ? "Goods receipt audit" : "Supplier return audit"}</h4>
+          <button type="button" className="pos-icon-button" onClick={() => { setKind(""); setRows([]); }} aria-label="Close procurement history"><X size={16} /></button>
+        </div>
+        {loading ? <p>Loading audit records…</p> : error ? <p className="pos-return-error">{error}</p>
+          : rows.length === 0 ? <p>No {kind === "receipts" ? "goods receipts" : "supplier returns"} recorded for this order.</p>
+          : rows.map((record) => <article className="pos-procurement-history-record" key={record.id}>
+            <div><strong>{kind === "receipts" ? record.receiptNumber : record.returnNumber}</strong>
+              <small>{record.createdAt ? new Date(record.createdAt).toLocaleString("en-IN") : "—"} · {kind === "receipts" ? record.receivedByUsername : record.processedByUsername}</small>
+              <small>{record.reason}</small></div>
+            <div className="pos-procurement-history-lines">{(record.items || []).map((item) => <span key={item.purchaseOrderItemId}>
+              {item.sku}: {item.quantity} × {money(item.unitCost)}
+            </span>)}</div>
+          </article>)}
+      </section>}
+    </div>
+  );
+}
+
 function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onError }) {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -847,6 +890,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                     {["PARTIALLY_RECEIVED", "RECEIVED"].includes(order.status) && order.items.some((item) => item.receivedQuantity > item.returnedQuantity) &&
                       <button type="button" className="pos-button secondary compact" onClick={() => openSupplierReturn(order)} disabled={stockCountActive}>Return to supplier</button>}
                   </div>
+                  <ProcurementHistory purchaseOrderId={order.id} />
                 </article>
               ))}
         </div>
