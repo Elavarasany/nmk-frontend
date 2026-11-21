@@ -5070,7 +5070,7 @@ function StaffManagementPage({ api, onNotice }) {
                           <option value="CASHIER">Cashier</option>
                         </select>
                       </td>
-                      <td><span className={account.enabled ? "status-badge status-active" : "status-badge status-inactive"}>
+                      <td><span className={account.enabled ? "admin-status available" : "admin-status inactive"}>
                         {account.enabled ? "Active" : "Disabled"}
                       </span></td>
                       <td>{formatDate(account.createdAt)}</td>
