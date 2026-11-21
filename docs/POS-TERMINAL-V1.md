@@ -17,6 +17,11 @@ The cashier terminal is available at `/admin/pos` after an admin signs in.
 - Calculate cash change.
 - Submit the sale through the authenticated POS checkout API.
 - View paginated sales history, inspect a transaction and print/reprint an invoice.
+- Open a cashier shift with an opening cash float before the first sale.
+- Record audited cash-in and cash-out drawer movements with reasons.
+- Calculate expected drawer cash from opening float, cash tenders and cash movements.
+- Close a shift with an actual cash count and a mandatory explanation for any variance.
+- Link each new POS sale and cash tender to the active cashier shift.
 - Retry uncertain checkout requests with the same idempotency key and unchanged payload to reduce duplicate-sale risk.
 
 ## Backend contract
@@ -37,7 +42,7 @@ Stock receipts are handled separately through the authenticated inventory receip
 
 This terminal does not claim to implement the complete retail operations suite. These features remain separate work:
 
-- Cash registers, cashier shifts, opening floats, cash-in/out and shift closing/reconciliation.
+- Multi-register assignment policies, shift reopening, supervisor override thresholds and cross-register cash transfers. Basic register, shift, opening-float, cash-in/out and closing-reconciliation workflows are implemented.
 - Returns, exchanges, refunds, voids and credit notes.
 - GST/tax calculation and accountant-approved invoice numbering/wording.
 - Supplier purchasing, goods receipt, purchase returns and stock counts.
@@ -72,3 +77,12 @@ Administrators can create and manage staff accounts from Admin → Staff. Staff 
 Disabled staff accounts are rejected at login and their previously issued tokens are rejected on subsequent API requests. A staff member cannot disable their own account, and the final active administrator cannot be disabled or demoted.
 
 Backend migration: `nmk-backend/src/main/resources/db/manual/006-add-staff-roles.sql`. This migration is manual and additive. It must be reviewed and tested on a disposable staging copy before use; it has not been run against any live/client database.
+
+
+## Register and shift operation
+
+The backend migration `007-create-register-shifts-cash.sql` creates a MAIN register for each active location and the append-only cash movement ledger. A cashier must open a shift before checkout; a new sale must reference that shift. Cash sales add the payment allocation (not the tendered amount) to expected drawer cash. Change returned to the customer is excluded from drawer income.
+
+The POS page shows register selection, opening float, expected drawer cash, cash-in/out and shift closing. A cash variance requires an explanation. Cashier access is limited to their own shift; managers and administrators can review and close shifts. The checkout, cash tender ledger and stock deduction commit in one backend transaction.
+
+Migration 007 is manual and has not been executed against any live/client database.
