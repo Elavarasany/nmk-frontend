@@ -1071,6 +1071,7 @@
 }
 .pos-report-summary article span { color: #7b8797; font-size: 10px; }
 .pos-report-summary article strong { color: var(--pos-navy); font-size: 19px; }
+.pos-report-note { margin: 10px 0 16px; color: #697789; font-size: 11px; line-height: 1.55; }
 .pos-report-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
