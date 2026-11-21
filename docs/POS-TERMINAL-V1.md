@@ -95,3 +95,12 @@ Managers and administrators can open a completed sale from Sales history and pro
 Each returned line must be classified as RESTOCK, DAMAGED or DISCARD. Only RESTOCK adds inventory, and it writes a dedicated append-only stock movement. DAMAGED and DISCARD require a reason and do not increase stock. Cash refunds reduce the active shift's expected drawer cash. UPI/card refunds require a provider transaction reference; the POS records that reference but does not itself execute the provider refund.
 
 Backend migration: `008-create-customer-returns.sql`. It is manual and has not been run against any live/client database.
+
+
+## Physical stock count sessions
+
+Managers and administrators can start a physical stock count from the Inventory tab. The backend snapshots every variant at the location and freezes stock-changing operations until the count is posted or cancelled. Enter and save the physical quantity for each line, submit the completed count for review, then post the variances. Each non-zero difference becomes a `COUNT_VARIANCE` stock movement linked to the session.
+
+The POS catalogue exposes the location freeze state so the cashier terminal warns and disables checkout while a count is active. A failed post leaves the location frozen; retry the post or cancel the session after reviewing it. Do not manually clear the location lock in the database.
+
+Backend migration: `009-create-stock-count-sessions.sql`. It is manual and has not been run against any live/client database.
