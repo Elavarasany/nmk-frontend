@@ -839,7 +839,7 @@ export default function PosTerminal() {
                 {registers.length ? registers.map((register) => <option key={register.id} value={register.id}>{register.registerCode} · {register.name}</option>) : <option value="">No register configured</option>}
               </select>
             </label>
-            {!shift?.id ? (
+            {(!shift?.id || shift.status === "CLOSED") ? (
               <>
                 <label>Opening cash float (₹)
                   <input type="number" min="0" step="0.01" value={openingFloat} onChange={(event) => setOpeningFloat(event.target.value)} disabled={shiftSaving || !registerId} />
