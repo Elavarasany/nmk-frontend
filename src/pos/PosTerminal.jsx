@@ -136,6 +136,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [reorderDrafts, setReorderDrafts] = useState({});
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [lowStockLoading, setLowStockLoading] = useState(false);
+  const [movementRows, setMovementRows] = useState([]);
+  const [movementPage, setMovementPage] = useState(0);
+  const [movementPages, setMovementPages] = useState(0);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [movementVariantId, setMovementVariantId] = useState("");
   const stockCountActive = stockCount && ["COUNTING", "READY_FOR_REVIEW"].includes(stockCount.status);
 
   const [suppliers, setSuppliers] = useState([]);
@@ -400,6 +405,31 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     finally { setLowStockLoading(false); }
   }, [locationId, onError]);
 
+  const loadMovementHistory = useCallback(async (page = movementPage) => {
+    if (!locationId) {
+      setMovementRows([]);
+      setMovementPage(0);
+      setMovementPages(0);
+      return;
+    }
+    setMovementLoading(true);
+    try {
+      const variantFilter = movementVariantId
+        ? `&variantId=${encodeURIComponent(movementVariantId)}`
+        : "";
+      const data = await apiRequest(
+        `/admin/inventory/movements?locationId=${encodeURIComponent(locationId)}${variantFilter}&page=${page}&size=20`
+      );
+      setMovementRows(Array.isArray(data?.content) ? data.content : []);
+      setMovementPage(Number(data?.number || 0));
+      setMovementPages(Number(data?.totalPages || 0));
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setMovementLoading(false);
+    }
+  }, [locationId, movementVariantId, movementPage, onError]);
+
   const updateReorderLevel = async (variantId, currentLevel) => {
     const raw = reorderDrafts[variantId] ?? currentLevel;
     const reorderLevel = Number(raw);
@@ -546,6 +576,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
   useEffect(() => { loadStockCount(); }, [loadStockCount]);
   useEffect(() => { loadLowStock(); }, [loadLowStock]);
+  useEffect(() => { loadMovementHistory(0); }, [locationId, movementVariantId]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
@@ -935,6 +966,47 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         {variantsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading variants…</span></div>
           : stockRows.length === 0 ? <div className="pos-empty-state"><Package /><strong>No stockable variants yet</strong><span>Create a variant and receive stock to make this product available in POS.</span></div>
           : <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Variant</th><th>SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Reorder level</th><th>Price</th></tr></thead><tbody>{stockRows.map((variant) => <tr key={variant.variantId}><td><strong>{variant.variantName}</strong></td><td>{variant.sku}</td><td>{variant.onHandQuantity}</td><td>{variant.reservedQuantity}</td><td><strong>{variant.availableQuantity}</strong></td><td><div className="pos-reorder-control"><input type="number" min="0" max="1000000" step="1" value={reorderDrafts[variant.variantId] ?? variant.reorderLevel ?? 0} onChange={(event) => setReorderDrafts((current) => ({ ...current, [variant.variantId]: event.target.value }))} aria-label={`Reorder level for ${variant.sku}`} /><button type="button" className="pos-button secondary compact" onClick={() => updateReorderLevel(variant.variantId, variant.reorderLevel ?? 0)} disabled={reorderDrafts[variant.variantId] == null}>Save</button></div></td><td>{money(variant.sellingPrice)}</td></tr>)}</tbody></table></div>}
+      </section>
+      <section className="pos-inventory-card pos-stock-card">
+        <div className="pos-inventory-card-heading">
+          <ClipboardCheck size={18} />
+          <div><h3>Stock movement history</h3><p>Append-only audit ledger for receipts, sales, reservations, returns and adjustments.</p></div>
+          <button type="button" className="pos-button secondary compact" onClick={() => loadMovementHistory(movementPage)} disabled={movementLoading}>
+            <RefreshCw size={15} className={movementLoading ? "pos-spin" : ""} /> Refresh
+          </button>
+        </div>
+        <div className="pos-report-filters">
+          <label>Filter variant
+            <select value={movementVariantId} onChange={(event) => setMovementVariantId(event.target.value)}>
+              <option value="">All variants</option>
+              {catalog.flatMap((product) => (product.variants || []).map((variant) => (
+                <option key={variant.variantId} value={variant.variantId}>{product.name} · {variant.variantName || variant.sku} · {variant.sku}</option>
+              )))}
+            </select>
+          </label>
+        </div>
+        {movementLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading stock movements…</span></div>
+          : movementRows.length === 0 ? <div className="pos-empty-state"><ClipboardCheck /><strong>No stock movements found</strong><span>Receipts, sales and other stock ledger events will appear here.</span></div>
+            : <div className="pos-history-table-wrap"><table className="pos-history-table">
+              <thead><tr><th>Date</th><th>Product / SKU</th><th>Movement</th><th>Qty Δ</th><th>Reserved Δ</th><th>On hand after</th><th>Reserved after</th><th>Reference</th><th>Reason</th></tr></thead>
+              <tbody>{movementRows.map((movement) => <tr key={movement.id}>
+                <td>{movement.createdAt ? new Date(movement.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—"}</td>
+                <td><strong>{movement.productName}</strong><small>{movement.variantName} · {movement.sku}</small></td>
+                <td>{movement.movementType}</td>
+                <td><strong>{Number(movement.quantityDelta) > 0 ? "+" : ""}{movement.quantityDelta}</strong></td>
+                <td>{Number(movement.reservedDelta) > 0 ? "+" : ""}{movement.reservedDelta}</td>
+                <td>{movement.onHandAfter}</td><td>{movement.reservedAfter}</td>
+                <td>{movement.referenceType || "—"}{movement.referenceId ? <small>#{movement.referenceId}</small> : null}</td>
+                <td>{movement.reason || "—"}</td>
+              </tr>)}</tbody>
+            </table></div>}
+        <div className="pos-pagination">
+          <span>Page {movementPages ? movementPage + 1 : 0} of {movementPages}</span>
+          <div>
+            <button type="button" disabled={movementPage <= 0 || movementLoading} onClick={() => loadMovementHistory(movementPage - 1)} aria-label="Previous stock movement page"><ChevronLeft size={18} /></button>
+            <button type="button" disabled={movementPage + 1 >= movementPages || movementLoading} onClick={() => loadMovementHistory(movementPage + 1)} aria-label="Next stock movement page"><ChevronRight size={18} /></button>
+          </div>
+        </div>
       </section>
     </section>
   );
