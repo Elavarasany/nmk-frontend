@@ -970,6 +970,7 @@ export default function PosTerminal() {
         setPendingPayload(null);
         setRetryPending(false);
       }
+      if (err.status === 409) await loadCatalog();
       setError(`${err.message} Your cart is preserved.${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same checkout; the same request key will be reused to prevent a duplicate sale." : " Correct the details and submit again."}`);
     } finally { setCheckoutLoading(false); }
   };
