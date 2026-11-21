@@ -1729,7 +1729,23 @@ export default function PosTerminal() {
           setExchangeMode(true);
           setExchangePendingPayload(pendingExchangeRecord.current.payload);
           setExchangeRetryPending(true);
-          setExchangeReason(pendingExchangeRecord.current.payload.reason || "");
+          const payload = pendingExchangeRecord.current.payload;
+          setExchangeReason(payload.reason || "");
+          setReturnQuantities(Object.fromEntries((payload.returnItems || []).map((item) => [item.saleItemId, item.quantity])));
+          setReturnDispositions(Object.fromEntries((payload.returnItems || []).map((item) => [item.saleItemId, item.restockDisposition || "RESTOCK"])));
+          setReturnDispositionReasons(Object.fromEntries((payload.returnItems || []).map((item) => [item.saleItemId, item.dispositionReason || ""])));
+          setExchangeDiscount(String(payload.replacementDiscountAmount || "0.00"));
+          const collection = payload.collectionPayments?.[0];
+          if (collection) {
+            setExchangeCollectionMethod(collection.paymentMethod || "CASH");
+            setExchangeCollectionTendered(String(collection.tenderedAmount ?? ""));
+            setExchangeCollectionReference(collection.transactionReference || "");
+          }
+          const refund = payload.refundPayments?.[0];
+          if (refund) {
+            setExchangeRefundMethod(refund.paymentMethod || "CASH");
+            setExchangeRefundReference(refund.transactionReference || "");
+          }
           setError("An unfinished exchange was recovered. Review the original sale and enter a manager password to retry the exact original request.");
         } else if (pendingReturnRecord.current) {
           const payload = pendingReturnRecord.current.payload;
@@ -1754,6 +1770,20 @@ export default function PosTerminal() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!exchangePendingPayload || !catalog.length || exchangeItems.length) return;
+    const restored = (exchangePendingPayload.replacementItems || []).map((line) => {
+      const product = catalog.find((row) => Number(row.productId) === Number(line.productId));
+      const variant = product?.variants?.find((row) => Number(row.variantId) === Number(line.variantId));
+      return product && variant ? {
+        productId: Number(line.productId), variantId: Number(line.variantId),
+        productName: product.name, variantName: variant.variantName || variant.sku,
+        sku: variant.sku, unitPrice: Number(variant.sellingPrice), quantity: Number(line.quantity),
+      } : null;
+    }).filter(Boolean);
+    if (restored.length) setExchangeItems(restored);
+  }, [exchangePendingPayload, catalog, exchangeItems.length]);
 
   useEffect(() => { loadLocations(); }, [loadLocations]);
   useEffect(() => { loadRegisters(); }, [loadRegisters]);
@@ -2780,7 +2810,7 @@ export default function PosTerminal() {
             {returnQuote > 0 && returnPaymentMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the refund in the UPI/card provider first. This POS records the reference; it does not send the provider refund.</p>}
             <div className="pos-modal-actions">
               <button type="button" className="pos-button secondary" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending}>Cancel</button>
-              <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || !shift?.id || shift.status !== "OPEN" || !returnPassword.trim()}>
+              <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || (!returnPendingPayload && (!shift?.id || shift.status !== "OPEN")) || !returnPassword.trim()}>
                 {returnSaving ? "Recording…" : returnRetryPending ? "Retry same return" : "Confirm return"}
               </button>
             </div>
@@ -2912,7 +2942,7 @@ export default function PosTerminal() {
               <button type="button" className="pos-button secondary" onClick={() => { setReturnSale(null); setExchangeMode(false); }}
                 disabled={exchangeSaving || exchangeRetryPending}>Cancel</button>
               <button type="button" className="pos-button primary" onClick={submitExchange}
-                disabled={exchangeSaving || !shift?.id || shift.status !== "OPEN" || !exchangeItems.length || !exchangePassword.trim()}>
+                disabled={exchangeSaving || (!exchangePendingPayload && (!shift?.id || shift.status !== "OPEN" || !exchangeItems.length)) || !exchangePassword.trim()}>
                 {exchangeSaving ? "Processing…" : exchangeRetryPending ? "Retry same exchange" : "Confirm exchange"}
               </button>
             </div>
@@ -2944,7 +2974,7 @@ export default function PosTerminal() {
           <p className="pos-retry-note">Refunds to UPI/card must be completed through the payment provider or bank first. Enter the actual refund reference; this POS records the refund but does not send it to the provider.</p>
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setVoidDialogOpen(false)} disabled={voidSaving || voidRetry}>Cancel</button>
-            <button type="button" className="pos-button primary" onClick={submitVoid} disabled={voidSaving || !shift?.id || !voidReason.trim() || !voidPassword.trim()}>{voidSaving ? "Voiding…" : voidRetry ? "Retry same void" : "Confirm full void"}</button>
+            <button type="button" className="pos-button primary" onClick={submitVoid} disabled={voidSaving || (!voidPayload && !shift?.id) || !voidReason.trim() || !voidPassword.trim()}>{voidSaving ? "Voiding…" : voidRetry ? "Retry same void" : "Confirm full void"}</button>
           </div>
         </section>
       </div>}
