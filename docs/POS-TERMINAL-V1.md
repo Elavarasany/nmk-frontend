@@ -106,9 +106,9 @@ The POS catalogue exposes the location freeze state so the cashier terminal warn
 Backend migration: `009-create-stock-count-sessions.sql`. It is manual and has not been run against any live/client database.
 
 
-## Supplier procurement (backend API foundation)
+## Supplier procurement
 
-The backend now supports supplier records, DRAFT purchase orders, order submission, partial/full goods receipts and supplier returns. Goods receipt creates stock only after the receipt is recorded; supplier returns reduce stock and cannot remove reserved units. Both flows use idempotency keys and append-only stock movements. The current POS screen does not yet expose the procurement workflow as a dedicated user interface.
+The Inventory tab includes supplier creation, DRAFT purchase order creation, order submission, partial/full goods receipt and supplier return actions. Goods receipt creates stock only after the receipt is recorded; supplier returns reduce stock and cannot remove reserved units. Both flows use idempotency keys and append-only stock movements. Uncertain receipt/return responses retain the original payload and key for safe retry.
 
 Supplier credit notes, accounts payable, GST/landed-cost accounting and automatic supplier payments are not included. These require the client's accounting policies and accountant-approved tax rules.
 
