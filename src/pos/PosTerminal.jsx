@@ -133,6 +133,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [stockCountSaving, setStockCountSaving] = useState(false);
   const [stockCountReason, setStockCountReason] = useState("");
   const [stockCountDrafts, setStockCountDrafts] = useState({});
+  const [reorderDrafts, setReorderDrafts] = useState({});
+  const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [lowStockLoading, setLowStockLoading] = useState(false);
   const stockCountActive = stockCount && ["COUNTING", "READY_FOR_REVIEW"].includes(stockCount.status);
 
   const [suppliers, setSuppliers] = useState([]);
@@ -387,6 +390,34 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     } finally { setSupplierReturnSaving(false); }
   };
 
+  const loadLowStock = useCallback(async () => {
+    if (!locationId) { setLowStockAlerts([]); return; }
+    setLowStockLoading(true);
+    try {
+      const data = await apiRequest(`/admin/inventory/low-stock?locationId=${encodeURIComponent(locationId)}`);
+      setLowStockAlerts(Array.isArray(data) ? data : []);
+    } catch (err) { onError(err.message); }
+    finally { setLowStockLoading(false); }
+  }, [locationId, onError]);
+
+  const updateReorderLevel = async (variantId, currentLevel) => {
+    const raw = reorderDrafts[variantId] ?? currentLevel;
+    const reorderLevel = Number(raw);
+    if (!Number.isInteger(reorderLevel) || reorderLevel < 0 || reorderLevel > 1000000) {
+      onError("Reorder level must be a whole number from 0 to 1,000,000.");
+      return;
+    }
+    try {
+      await apiRequest("/admin/inventory/reorder-level", {
+        method: "PATCH",
+        body: JSON.stringify({ locationId: Number(locationId), variantId: Number(variantId), reorderLevel }),
+      });
+      setReorderDrafts((current) => { const next = { ...current }; delete next[variantId]; return next; });
+      await Promise.all([onRefreshCatalog(), loadLowStock()]);
+      onNotice(reorderLevel === 0 ? "Low stock alert disabled for this variant." : `Reorder alert set to ${reorderLevel} available units.`);
+    } catch (err) { onError(err.message); }
+  };
+
   const loadStockCount = useCallback(async () => {
     if (!locationId) { setStockCount(null); return; }
     setStockCountLoading(true);
@@ -514,6 +545,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { loadProducts(); }, [loadProducts]);
   useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
   useEffect(() => { loadStockCount(); }, [loadStockCount]);
+  useEffect(() => { loadLowStock(); }, [loadLowStock]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
@@ -891,9 +923,18 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
       <section className="pos-inventory-card pos-stock-card">
         <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Current stock by variant</h3><p>{selectedProduct?.name || "Select a product"} · {stockRows.length} active variants at this location</p></div></div>
+        <div className="pos-low-stock-alerts">
+          <div className="pos-low-stock-heading"><strong>Low stock alerts</strong><span>{lowStockLoading ? "Refreshing…" : `${lowStockAlerts.length} variants at or below reorder level`}</span></div>
+          {lowStockLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading alerts…</span></div>
+            : lowStockAlerts.length === 0 ? <p>No low-stock alerts. Set a reorder level above zero on a variant to enable alerts.</p>
+              : <div className="pos-low-stock-list">{lowStockAlerts.map((item) => <div key={item.variantId}>
+                <span><strong>{item.productName}</strong><small>{item.variantName} · {item.sku} · {item.locationName}</small></span>
+                <span><strong>{item.availableQuantity} available</strong><small>Reorder at {item.reorderLevel}</small></span>
+              </div>)}</div>}
+        </div>
         {variantsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading variants…</span></div>
           : stockRows.length === 0 ? <div className="pos-empty-state"><Package /><strong>No stockable variants yet</strong><span>Create a variant and receive stock to make this product available in POS.</span></div>
-          : <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Variant</th><th>SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Price</th></tr></thead><tbody>{stockRows.map((variant) => <tr key={variant.variantId}><td><strong>{variant.variantName}</strong></td><td>{variant.sku}</td><td>{variant.onHandQuantity}</td><td>{variant.reservedQuantity}</td><td><strong>{variant.availableQuantity}</strong></td><td>{money(variant.sellingPrice)}</td></tr>)}</tbody></table></div>}
+          : <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Variant</th><th>SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Reorder level</th><th>Price</th></tr></thead><tbody>{stockRows.map((variant) => <tr key={variant.variantId}><td><strong>{variant.variantName}</strong></td><td>{variant.sku}</td><td>{variant.onHandQuantity}</td><td>{variant.reservedQuantity}</td><td><strong>{variant.availableQuantity}</strong></td><td><div className="pos-reorder-control"><input type="number" min="0" max="1000000" step="1" value={reorderDrafts[variant.variantId] ?? variant.reorderLevel ?? 0} onChange={(event) => setReorderDrafts((current) => ({ ...current, [variant.variantId]: event.target.value }))} aria-label={`Reorder level for ${variant.sku}`} /><button type="button" className="pos-button secondary compact" onClick={() => updateReorderLevel(variant.variantId, variant.reorderLevel ?? 0)} disabled={reorderDrafts[variant.variantId] == null}>Save</button></div></td><td>{money(variant.sellingPrice)}</td></tr>)}</tbody></table></div>}
       </section>
     </section>
   );
