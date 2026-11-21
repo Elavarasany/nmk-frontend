@@ -3,11 +3,19 @@ name: Frontend CI
 on:
   pull_request:
     branches:
+      - main
       - feature/customer-checkout-variant-flow
   push:
     branches:
       - feature/pos-cashier-ui
       - feature/pos-operations-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
