@@ -127,3 +127,9 @@ Backend migration: `011-audit-reorder-level-changes.sql`. It is manual and has n
 The Reports tab provides date-scoped totals for transactions, subtotal, discounts, sales after discount, returns/refunds processed during the selected dates, net after refunds, sales and refund payment methods, cashier totals, daily totals and top products. Refunds are reported on the date the return is processed. The report is limited to 367 calendar days and is available to managers and administrators.
 
 The report is operational POS reporting only. It does not calculate GST, profit, supplier liabilities, bank settlements or accountant-approved financial statements.
+
+## Full sale voids
+
+ADMIN and MANAGER users can void an entire completed sale from its transaction details. The POS checks that no return already exists, requires a reason and a full refund allocation, and submits the dedicated manager-only `/admin/pos/sales/{saleId}/void` endpoint. The backend restores every original sale line to stock and writes a separate `VOID` audit record; the original sale and invoice are retained.
+
+Cash refunds are paid from the open drawer and are rejected when expected drawer cash is insufficient. UPI/card refunds require the refund to be completed and verified with the provider first; the POS stores the provider reference but does not initiate the provider transfer. A full void is blocked after any partial or full return.
