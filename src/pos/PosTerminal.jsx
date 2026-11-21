@@ -233,6 +233,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [goodsReceiptQuantities, setGoodsReceiptQuantities] = useState({});
   const [goodsReceiptSaving, setGoodsReceiptSaving] = useState(false);
   const [goodsReceiptRetry, setGoodsReceiptRetry] = useState(false);
+  const [goodsReceiptPassword, setGoodsReceiptPassword] = useState("");
   const [goodsReceiptPayload, setGoodsReceiptPayload] = useState(null);
   const [procurementActionError, setProcurementActionError] = useState("");
   const goodsReceiptPending = useRef(null);
@@ -241,6 +242,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [supplierReturnQuantities, setSupplierReturnQuantities] = useState({});
   const [supplierReturnSaving, setSupplierReturnSaving] = useState(false);
   const [supplierReturnRetry, setSupplierReturnRetry] = useState(false);
+  const [supplierReturnPassword, setSupplierReturnPassword] = useState("");
   const [supplierReturnPayload, setSupplierReturnPayload] = useState(null);
   const supplierReturnPending = useRef(null);
 
@@ -359,6 +361,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setGoodsReceiptReason("Supplier delivery checked against purchase order");
     setGoodsReceiptQuantities({});
     setGoodsReceiptRetry(false);
+    setGoodsReceiptPassword("");
     setGoodsReceiptPayload(null);
     goodsReceiptPending.current = null;
   };
@@ -389,13 +392,15 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setGoodsReceiptSaving(true);
     onError("");
     try {
+      const authorizationToken = await authorizePosAction("GOODS_RECEIPT", goodsReceiptPassword);
       const receipt = await apiRequest(`/admin/procurement/purchase-orders/${receivingOrder.id}/receive`, {
-        method: "POST", body: JSON.stringify(payload),
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(payload),
       });
       setReceivingOrder(null);
       setGoodsReceiptPayload(null);
       goodsReceiptPending.current = null;
       setGoodsReceiptRetry(false);
+      setGoodsReceiptPassword("");
       setProcurementActionError("");
       await Promise.all([loadProcurement(), onRefreshCatalog()]);
       onNotice(`Goods receipt ${receipt.receiptNumber} saved and stock updated.`);
@@ -414,6 +419,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setSupplierReturnReason("Goods returned to supplier");
     setSupplierReturnQuantities({});
     setSupplierReturnRetry(false);
+    setSupplierReturnPassword("");
     setSupplierReturnPayload(null);
     supplierReturnPending.current = null;
   };
@@ -446,13 +452,15 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setSupplierReturnSaving(true);
     onError("");
     try {
+      const authorizationToken = await authorizePosAction("SUPPLIER_RETURN", supplierReturnPassword);
       const result = await apiRequest(`/admin/procurement/purchase-orders/${supplierReturnOrder.id}/supplier-returns`, {
-        method: "POST", body: JSON.stringify(payload),
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(payload),
       });
       setSupplierReturnOrder(null);
       setSupplierReturnPayload(null);
       supplierReturnPending.current = null;
       setSupplierReturnRetry(false);
+      setSupplierReturnPassword("");
       setProcurementActionError("");
       await Promise.all([loadProcurement(), onRefreshCatalog()]);
       onNotice(`Supplier return ${result.returnNumber} recorded and stock reduced.`);
@@ -1023,10 +1031,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               disabled={goodsReceiptSaving || goodsReceiptRetry} />
           </label>)}
           <label className="pos-return-field">Receipt reason<input value={goodsReceiptReason} onChange={(event) => setGoodsReceiptReason(event.target.value)} maxLength={500} disabled={goodsReceiptSaving || goodsReceiptRetry} /></label>
+          <label className="pos-return-field">Confirm staff password<input type="password" autoComplete="current-password"
+            value={goodsReceiptPassword} onChange={(event) => setGoodsReceiptPassword(event.target.value)} disabled={goodsReceiptSaving}
+            placeholder="Required to receive purchase order goods" /></label>
           {goodsReceiptRetry && <p className="pos-retry-note">Retry the exact same receipt. Its original idempotency key is retained.</p>}
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setReceivingOrder(null)} disabled={goodsReceiptSaving || goodsReceiptRetry}>Cancel</button>
-            <button type="button" className="pos-button primary" onClick={receivePurchaseOrderGoods} disabled={goodsReceiptSaving || stockCountActive}>{goodsReceiptSaving ? "Receiving…" : goodsReceiptRetry ? "Retry same receipt" : "Confirm goods receipt"}</button>
+            <button type="button" className="pos-button primary" onClick={receivePurchaseOrderGoods} disabled={goodsReceiptSaving || stockCountActive || !goodsReceiptPassword.trim()}>{goodsReceiptSaving ? "Receiving…" : goodsReceiptRetry ? "Retry same receipt" : "Confirm goods receipt"}</button>
           </div>
         </section>
       </div>}
@@ -1049,10 +1060,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
             </label>;
           })}
           <label className="pos-return-field">Supplier return reason<input value={supplierReturnReason} onChange={(event) => setSupplierReturnReason(event.target.value)} maxLength={500} disabled={supplierReturnSaving || supplierReturnRetry} /></label>
+          <label className="pos-return-field">Confirm staff password<input type="password" autoComplete="current-password"
+            value={supplierReturnPassword} onChange={(event) => setSupplierReturnPassword(event.target.value)} disabled={supplierReturnSaving}
+            placeholder="Required to return goods to supplier" /></label>
           {supplierReturnRetry && <p className="pos-retry-note">Retry the exact same supplier return. Its original idempotency key is retained.</p>}
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSupplierReturnOrder(null)} disabled={supplierReturnSaving || supplierReturnRetry}>Cancel</button>
-            <button type="button" className="pos-button primary" onClick={returnPurchaseOrderGoods} disabled={supplierReturnSaving || stockCountActive}>{supplierReturnSaving ? "Recording…" : supplierReturnRetry ? "Retry same return" : "Confirm supplier return"}</button>
+            <button type="button" className="pos-button primary" onClick={returnPurchaseOrderGoods} disabled={supplierReturnSaving || stockCountActive || !supplierReturnPassword.trim()}>{supplierReturnSaving ? "Recording…" : supplierReturnRetry ? "Retry same return" : "Confirm supplier return"}</button>
           </div>
         </section>
       </div>}
