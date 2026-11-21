@@ -1188,6 +1188,7 @@ export default function PosTerminal() {
               <button type="button" className="pos-icon-button" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending} aria-label="Close return"><X /></button>
             </div>
             <p className="pos-return-note">Return quantities are checked against the original sale and previous returns. Only resaleable items marked RESTOCK will increase stock.</p>
+            {error && <p className="pos-return-error" role="alert">{error}</p>}
             <div className="pos-return-lines">
               <table>
                 <thead><tr><th>Item</th><th>Sold</th><th>Remaining</th><th>Return qty</th><th>Disposition</th></tr></thead>
