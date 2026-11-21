@@ -181,16 +181,20 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [reason, setReason] = useState("Supplier stock receipt");
   const [receiptSaving, setReceiptSaving] = useState(false);
   const [receiptRetry, setReceiptRetry] = useState(false);
+  const [receiptPassword, setReceiptPassword] = useState("");
   const receiptPayload = useRef(null);
   const [adjustmentDelta, setAdjustmentDelta] = useState("0");
   const [adjustmentReason, setAdjustmentReason] = useState("Physical stock count correction");
   const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [adjustmentRetry, setAdjustmentRetry] = useState(false);
+  const [adjustmentPassword, setAdjustmentPassword] = useState("");
   const adjustmentPayload = useRef(null);
   const [stockCount, setStockCount] = useState(null);
   const [stockCountLoading, setStockCountLoading] = useState(false);
   const [stockCountSaving, setStockCountSaving] = useState(false);
   const [stockCountReason, setStockCountReason] = useState("");
+  const [stockCountPostPassword, setStockCountPostPassword] = useState("");
+  const [stockCountCancelPassword, setStockCountCancelPassword] = useState("");
   const [stockCountDrafts, setStockCountDrafts] = useState({});
   const [reorderDrafts, setReorderDrafts] = useState({});
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
@@ -590,9 +594,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setStockCountSaving(true);
     onError("");
     try {
-      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/post`, { method: "POST" });
+      const authorizationToken = await authorizePosAction("STOCK_COUNT_POST", stockCountPostPassword);
+      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/post`, { method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken } });
       setStockCount(data);
       setStockCountDrafts({});
+      setStockCountPostPassword("");
       await onRefreshCatalog();
       onNotice(`Stock count #${data.id} posted. ${data.varianceLineCount} stock variances were applied.`);
     } catch (err) { onError(err.message); }
@@ -604,9 +610,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setStockCountSaving(true);
     onError("");
     try {
-      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST" });
+      const authorizationToken = await authorizePosAction("STOCK_COUNT_CANCEL", stockCountCancelPassword);
+      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken } });
       setStockCount(data);
       setStockCountDrafts({});
+      setStockCountCancelPassword("");
       await onRefreshCatalog();
       onNotice("Stock count cancelled. Inventory operations are available again.");
     } catch (err) { onError(err.message); }
@@ -703,11 +711,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     }
     setReceiptSaving(true);
     try {
+      const authorizationToken = await authorizePosAction("INVENTORY_RECEIPT", receiptPassword);
       const result = await apiRequest("/admin/inventory/receive", {
-        method: "POST", body: JSON.stringify(receiptPayload.current)
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(receiptPayload.current)
       });
       receiptPayload.current = null;
       setReceiptRetry(false);
+      setReceiptPassword("");
       setQuantity("1");
       await onRefreshCatalog();
       onNotice(`Stock received. Available quantity is now ${result.availableQuantity}.`);
@@ -747,11 +757,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     }
     setAdjustmentSaving(true);
     try {
+      const authorizationToken = await authorizePosAction("INVENTORY_ADJUSTMENT", adjustmentPassword);
       const result = await apiRequest("/admin/inventory/adjust", {
-        method: "POST", body: JSON.stringify(adjustmentPayload.current)
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(adjustmentPayload.current)
       });
       adjustmentPayload.current = null;
       setAdjustmentRetry(false);
+      setAdjustmentPassword("");
       setAdjustmentDelta("0");
       await onRefreshCatalog();
       onNotice(`Stock adjusted. On hand: ${result.onHandQuantity}; available: ${result.availableQuantity}.`);
