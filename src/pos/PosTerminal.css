@@ -550,3 +550,91 @@
   .pos-return-modal { padding: 15px; }
   .pos-return-payment { grid-template-columns: 1fr; }
 }
+
+
+.pos-stock-count-card { margin-bottom: 18px; }
+.pos-stock-count-start {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+.pos-stock-count-start label {
+  display: grid;
+  gap: 5px;
+  color: #778396;
+  font-size: 10px;
+  font-weight: 700;
+}
+.pos-stock-count-start input,
+.pos-stock-count-table input {
+  width: 100%;
+  min-width: 80px;
+  height: 35px;
+  padding: 0 9px;
+  border: 1px solid #e1e6ed;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--pos-ink);
+  font-size: 11px;
+}
+.pos-stock-count-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+  background: #f6f8fa;
+  color: #66758a;
+  font-size: 10px;
+}
+.pos-stock-count-summary strong { color: var(--pos-navy); }
+.pos-stock-count-table {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #e8ecf1;
+  border-radius: 9px;
+}
+.pos-stock-count-table table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  text-align: left;
+}
+.pos-stock-count-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px;
+  background: #f6f8fa;
+  color: #7a8797;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.pos-stock-count-table td {
+  padding: 9px 10px;
+  border-top: 1px solid #edf0f4;
+  color: #526176;
+  font-size: 11px;
+}
+.pos-stock-count-table td strong,
+.pos-stock-count-table td small { display: block; }
+.pos-stock-count-table td strong { color: var(--pos-navy); }
+.pos-stock-count-table td small { margin-top: 3px; color: #8a95a3; font-size: 9px; }
+.pos-stock-count-table .pos-count-positive { color: #26704b; }
+.pos-stock-count-table .pos-count-negative { color: #a23e3e; }
+.pos-stock-count-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media (max-width: 620px) {
+  .pos-stock-count-start { grid-template-columns: 1fr; }
+  .pos-stock-count-start .pos-button { width: 100%; }
+  .pos-stock-count-summary { flex-direction: column; }
+  .pos-stock-count-actions .pos-button { flex: 1 1 100%; }
+}
