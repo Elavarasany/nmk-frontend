@@ -1096,6 +1096,7 @@ export default function PosTerminal() {
   const [receipt, setReceipt] = useState(null);
   const [selectedHistorySale, setSelectedHistorySale] = useState(null);
   const [selectedSaleReturns, setSelectedSaleReturns] = useState(null);
+  const [selectedSaleExchanges, setSelectedSaleExchanges] = useState([]);
   const [saleReturnsLoading, setSaleReturnsLoading] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("Sale cancelled before customer leaves");
@@ -1916,12 +1917,17 @@ export default function PosTerminal() {
   const openHistorySale = async (sale) => {
     setSelectedHistorySale(sale);
     setSelectedSaleReturns(null);
+    setSelectedSaleExchanges([]);
     setSaleReturnsLoading(true);
     try {
       const full = await apiRequest(`/admin/pos/sales/${sale.id}`);
       setSelectedHistorySale(full);
-      const rows = await apiRequest(`/admin/pos/sales/${sale.id}/returns`);
+      const [rows, exchanges] = await Promise.all([
+        apiRequest(`/admin/pos/sales/${sale.id}/returns`),
+        apiRequest(`/admin/pos/sales/${sale.id}/exchange`),
+      ]);
       setSelectedSaleReturns(Array.isArray(rows) ? rows : []);
+      setSelectedSaleExchanges(Array.isArray(exchanges) ? exchanges : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -2211,6 +2217,17 @@ export default function PosTerminal() {
         <section className="pos-history-modal" role="dialog" aria-modal="true" aria-labelledby="pos-history-title">
           <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">TRANSACTION DETAILS</span><h2 id="pos-history-title">{selectedHistorySale.invoiceNumber}</h2></div><button type="button" className="pos-icon-button" onClick={() => setSelectedHistorySale(null)} aria-label="Close details"><X /></button></div>
           <div className="pos-history-detail-grid"><div><span>Customer</span><strong>{selectedHistorySale.customerName || "Walk-in"}</strong></div><div><span>Phone</span><strong>{selectedHistorySale.customerPhone || "—"}</strong></div><div><span>Cashier</span><strong>{selectedHistorySale.cashierUsername}</strong></div><div><span>Date</span><strong>{formatDate(selectedHistorySale.createdAt)}</strong></div><div><span>Total</span><strong>{money(selectedHistorySale.grandTotal)}</strong></div></div>
+          {selectedSaleExchanges.length > 0 && <section className="pos-exchange-history">
+            <h3>Exchange history</h3>
+            {selectedSaleExchanges.map((exchange) => <div className="pos-exchange-history-row" key={exchange.id}>
+              <div><strong>Exchange #{exchange.id}</strong><small>{formatDate(exchange.createdAt)} · {exchange.processedByUsername}</small></div>
+              <div><span>Replacement</span><strong>{exchange.replacementInvoiceNumber}</strong></div>
+              <div><span>Returned</span><strong>{money(exchange.returnedValue)}</strong></div>
+              <div><span>Replacement value</span><strong>{money(exchange.replacementValue)}</strong></div>
+              <div><span>Credit</span><strong>{money(exchange.creditApplied)}</strong></div>
+              <div><span>Collected / refunded</span><strong>{money(exchange.amountCollected)} / {money(exchange.actualRefund)}</strong></div>
+            </div>)}
+          </section>}
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button>
             {canViewHistory && <button type="button" className="pos-button secondary" onClick={beginReturn} disabled={returnLoading}>{returnLoading ? "Loading…" : "Process return"}</button>}
