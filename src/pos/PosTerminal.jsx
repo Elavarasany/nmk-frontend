@@ -1213,7 +1213,7 @@ export default function PosTerminal() {
     setVoidRefunds((sale.payments || []).map((payment) => ({
       paymentMethod: payment.paymentMethod,
       amount: payment.amount,
-      transactionReference: payment.transactionReference || "",
+      transactionReference: "",
     })));
     setVoidPayload(null);
     voidPending.current = null;
