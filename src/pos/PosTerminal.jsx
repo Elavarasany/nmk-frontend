@@ -175,7 +175,7 @@ function ReceiptView({ sale, onClose }) {
         <div className="pos-receipt-print">
           <div className="pos-receipt-brand">
             <strong>NMK OPTICALS</strong>
-            <span>SALES INVOICE</span>
+            <span>POS SALES RECEIPT</span>
           </div>
           <div className="pos-receipt-meta">
             <div><span>Invoice</span><strong>{sale.invoiceNumber}</strong></div>
@@ -210,7 +210,7 @@ function ReceiptView({ sale, onClose }) {
               .map((p, index) => <div key={`change-${index}`}><span>Change</span><span>{money(p.changeAmount)}</span></div>)}
           </div>
           <p className="pos-receipt-thanks">Thank you for shopping with NMK Opticals.</p>
-          <p className="pos-receipt-footnote">Computer-generated invoice · Please retain for your records</p>
+          <p className="pos-receipt-footnote">POS-generated receipt · GST tax breakdown and statutory invoice numbering are not configured</p>
         </div>
         <div className="pos-modal-actions">
           <button type="button" className="pos-button secondary" onClick={onClose}>Close</button>
