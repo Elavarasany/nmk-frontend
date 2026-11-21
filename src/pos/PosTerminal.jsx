@@ -17,6 +17,15 @@ const amount = (value) => Number(value || 0).toFixed(2);
 const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.() ||
   `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+async function authorizePosAction(action, password) {
+  if (!password?.trim()) throw new Error("Enter your staff password to authorize this action.");
+  const result = await apiRequest("/admin/auth/authorize-action", {
+    method: "POST",
+    body: JSON.stringify({ action, password }),
+  });
+  return result.authorizationToken;
+}
+
 async function apiRequest(path, options = {}) {
   if (!API_BASE) {
     throw new Error("POS API is not configured. Set VITE_API_BASE_URL to your deployed backend URL ending in /api.");
@@ -1146,6 +1155,7 @@ export default function PosTerminal() {
   const [saleReturnsLoading, setSaleReturnsLoading] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("Sale cancelled before customer leaves");
+  const [voidPassword, setVoidPassword] = useState("");
   const [voidRefunds, setVoidRefunds] = useState([]);
   const [voidSaving, setVoidSaving] = useState(false);
   const [voidRetry, setVoidRetry] = useState(false);
@@ -1155,6 +1165,7 @@ export default function PosTerminal() {
   const [returnSale, setReturnSale] = useState(null);
   const [saleReturns, setSaleReturns] = useState([]);
   const [returnReason, setReturnReason] = useState("");
+  const [returnPassword, setReturnPassword] = useState("");
   const [returnQuantities, setReturnQuantities] = useState({});
   const [returnDispositions, setReturnDispositions] = useState({});
   const [returnDispositionReasons, setReturnDispositionReasons] = useState({});
@@ -1167,6 +1178,7 @@ export default function PosTerminal() {
   const returnPendingKey = useRef(null);
   const [exchangeMode, setExchangeMode] = useState(false);
   const [exchangeReason, setExchangeReason] = useState("");
+  const [exchangePassword, setExchangePassword] = useState("");
   const [exchangeItems, setExchangeItems] = useState([]);
   const [exchangeSelectedVariantId, setExchangeSelectedVariantId] = useState("");
   const [exchangeDiscount, setExchangeDiscount] = useState("0.00");
@@ -1393,6 +1405,7 @@ export default function PosTerminal() {
       return;
     }
     setVoidReason("Sale cancelled before customer leaves");
+    setVoidPassword("");
     setVoidRefunds((sale.payments || []).map((payment) => ({
       paymentMethod: payment.paymentMethod,
       amount: payment.amount,
@@ -1436,8 +1449,9 @@ export default function PosTerminal() {
     setVoidSaving(true);
     setVoidError("");
     try {
+      const authorizationToken = await authorizePosAction("POS_VOID", voidPassword);
       const result = await apiRequest(`/admin/pos/sales/${selectedHistorySale.id}/void`, {
-        method: "POST", body: JSON.stringify(payload),
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(payload),
       });
       setVoidDialogOpen(false);
       setSelectedHistorySale(null);
@@ -1711,6 +1725,7 @@ export default function PosTerminal() {
       setReturnSale(selectedHistorySale);
       setExchangeMode(false);
       setReturnReason("");
+      setReturnPassword("");
       setReturnQuantities({});
       setReturnDispositions({});
       setReturnDispositionReasons({});
@@ -1739,6 +1754,7 @@ export default function PosTerminal() {
       setReturnDispositions({});
       setReturnDispositionReasons({});
       setExchangeReason("");
+      setExchangePassword("");
       setExchangeItems([]);
       setExchangeSelectedVariantId("");
       setExchangeDiscount("0.00");
@@ -1848,8 +1864,9 @@ export default function PosTerminal() {
     setExchangeSaving(true);
     setError("");
     try {
+      const authorizationToken = await authorizePosAction("POS_EXCHANGE", exchangePassword);
       const result = await apiRequest(`/admin/pos/sales/${returnSale.id}/exchange`, {
-        method: "POST", body: JSON.stringify(payload),
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(payload),
       });
       setReturnSale(null);
       setExchangeMode(false);
@@ -1949,8 +1966,10 @@ export default function PosTerminal() {
     setReturnSaving(true);
     setError("");
     try {
+      const authorizationToken = await authorizePosAction("POS_RETURN", returnPassword);
       const record = await apiRequest(`/admin/pos/sales/${returnSale.id}/returns`, {
         method: "POST",
+        headers: { "X-Admin-Action-Authorization": authorizationToken },
         body: JSON.stringify(payload),
       });
       setReturnSale(null);
