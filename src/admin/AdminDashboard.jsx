@@ -30,6 +30,7 @@ import {
   Printer,
   Info,
   Clock,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
