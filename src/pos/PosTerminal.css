@@ -673,6 +673,30 @@
   .pos-exchange-payment > strong { grid-column: auto; }
 }
 
+.pos-exchange-history {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 13px;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+  background: #fafbfd;
+}
+.pos-exchange-history h3 { margin: 0; color: var(--pos-navy); font-size: 12px; font-weight: 850; }
+.pos-exchange-history-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.2fr) repeat(5, minmax(100px, 1fr));
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #e9edf2;
+}
+.pos-exchange-history-row > div { display: grid; gap: 3px; }
+.pos-exchange-history-row span { color: #8792a0; font-size: 9px; }
+.pos-exchange-history-row strong { color: var(--pos-navy); font-size: 10px; overflow-wrap: anywhere; }
+.pos-exchange-history-row small { color: #8792a0; font-size: 9px; }
+@media (max-width: 760px) {
+  .pos-exchange-history-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .pos-stock-count-card { margin-bottom: 18px; }
 .pos-stock-count-start {
   display: grid;
