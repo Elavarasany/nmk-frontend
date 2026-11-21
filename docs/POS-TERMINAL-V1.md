@@ -74,7 +74,7 @@ Administrators can create and manage staff accounts from Admin → Staff. Staff 
 
 - ADMIN: full admin portal, POS, staff management and inventory operations.
 - MANAGER: POS checkout, sales history and inventory receipt/adjustment APIs.
-- CASHIER: POS checkout and product/location lookup only; no all-sales history, inventory adjustments or admin portal.
+- CASHIER: POS checkout and product/location lookup only; no sale discounts, all-sales history, inventory adjustments or admin portal. The backend rejects cashier discount requests even if the browser is modified.
 
 Disabled staff accounts are rejected at login and their previously issued tokens are rejected on subsequent API requests. A staff member cannot disable their own account, and the final active administrator cannot be disabled or demoted.
 
