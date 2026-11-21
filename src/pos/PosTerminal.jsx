@@ -1088,7 +1088,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
             <label>Confirm staff password<input type="password" autoComplete="current-password" value={receiptPassword}
               onChange={(e) => setReceiptPassword(e.target.value)} disabled={receiptSaving} required placeholder="Required to receive stock" /></label>
             {receiptRetry && <p className="pos-retry-note">A previous receipt response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId || stockCountActive || !receiptPassword.trim()}>
+            <button type="submit" className="pos-button primary" disabled={receiptSaving || (!receiptPayload.current && (!locationId || !selectedVariantId || stockCountActive)) || !receiptPassword.trim()}>
               {receiptSaving ? <><RefreshCw className="pos-spin" size={15} /> Receiving…</> : receiptRetry ? <><RefreshCw size={15} /> Retry same receipt</> : <><Plus size={16} /> Receive stock</>}
             </button>
           </form>
@@ -1117,7 +1117,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               onChange={(e) => setAdjustmentPassword(e.target.value)} disabled={adjustmentSaving} required placeholder="Required to adjust stock" /></label>
             <small>Use a positive number to add stock and a negative number to remove stock. Adjustments cannot reduce on-hand below stock already reserved for online orders.</small>
             {adjustmentRetry && <p className="pos-retry-note">A previous adjustment response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId || stockCountActive || !adjustmentPassword.trim()}>
+            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || (!adjustmentPayload.current && (!locationId || !selectedVariantId || stockCountActive)) || !adjustmentPassword.trim()}>
               {adjustmentSaving ? <><RefreshCw className="pos-spin" size={15} /> Adjusting…</> : adjustmentRetry ? <><RefreshCw size={15} /> Retry same adjustment</> : <><Plus size={16} /> Apply adjustment</>}
             </button>
           </form>
