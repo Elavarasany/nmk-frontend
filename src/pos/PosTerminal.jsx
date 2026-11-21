@@ -123,6 +123,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [receiptSaving, setReceiptSaving] = useState(false);
   const [receiptRetry, setReceiptRetry] = useState(false);
   const receiptPayload = useRef(null);
+  const [adjustmentDelta, setAdjustmentDelta] = useState("0");
+  const [adjustmentReason, setAdjustmentReason] = useState("Physical stock count correction");
+  const [adjustmentSaving, setAdjustmentSaving] = useState(false);
+  const [adjustmentRetry, setAdjustmentRetry] = useState(false);
+  const adjustmentPayload = useRef(null);
 
   const loadProducts = useCallback(async () => {
     setProductsLoading(true);
@@ -228,6 +233,49 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     } finally { setReceiptSaving(false); }
   };
 
+  const adjustStock = async (event) => {
+    event.preventDefault();
+    onError("");
+    if (!locationId) { onError("Choose an active inventory location."); return; }
+    if (!selectedVariantId) { onError("Choose an active variant before adjusting stock."); return; }
+    const delta = Number(adjustmentDelta);
+    if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 1000000) {
+      onError("Adjustment must be a non-zero whole number between -1,000,000 and 1,000,000.");
+      return;
+    }
+    if (!adjustmentReason.trim()) { onError("A stock adjustment reason is required."); return; }
+
+    if (!adjustmentPayload.current) {
+      adjustmentPayload.current = {
+        locationId: Number(locationId),
+        variantId: Number(selectedVariantId),
+        quantityDelta: delta,
+        idempotencyKey: newIdempotencyKey(),
+        reason: adjustmentReason.trim(),
+      };
+    }
+    setAdjustmentSaving(true);
+    try {
+      const result = await apiRequest("/admin/inventory/adjust", {
+        method: "POST", body: JSON.stringify(adjustmentPayload.current)
+      });
+      adjustmentPayload.current = null;
+      setAdjustmentRetry(false);
+      setAdjustmentDelta("0");
+      await onRefreshCatalog();
+      onNotice(`Stock adjusted. On hand: ${result.onHandQuantity}; available: ${result.availableQuantity}.`);
+    } catch (err) {
+      if (!err.status || err.status >= 500 || err.status === 409) {
+        setAdjustmentRetry(true);
+        onError(`${err.message} Retry the exact same adjustment to safely reuse its idempotency key.`);
+      } else {
+        adjustmentPayload.current = null;
+        setAdjustmentRetry(false);
+        onError(err.message);
+      }
+    } finally { setAdjustmentSaving(false); }
+  };
+
   const selectedProduct = products.find((product) => String(product.id) === String(selectedProductId));
   const stockRows = catalog.find((product) => String(product.productId) === String(selectedProductId))?.variants || [];
 
@@ -284,6 +332,33 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
             {receiptRetry && <p className="pos-retry-note">A previous receipt response was uncertain. Retry without changing the product, quantity or reason.</p>}
             <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId}>
               {receiptSaving ? <><RefreshCw className="pos-spin" size={15} /> Receiving…</> : receiptRetry ? <><RefreshCw size={15} /> Retry same receipt</> : <><Plus size={16} /> Receive stock</>}
+            </button>
+          </form>
+        </section>
+
+        <section className="pos-inventory-card">
+          <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Stock adjustment</h3><p>Correct a physical count, damage or verified stock discrepancy. Every change is recorded.</p></div></div>
+          <form onSubmit={adjustStock} className="pos-inventory-form">
+            <label>Product
+              <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} disabled={productsLoading || adjustmentRetry} required>
+                {products.length ? products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>) : <option value="">No active products</option>}
+              </select>
+            </label>
+            <label>Active variant / SKU
+              <select value={selectedVariantId} onChange={(e) => setSelectedVariantId(e.target.value)} disabled={variantsLoading || adjustmentRetry || !variants.some((v) => v.active)} required>
+                {variants.filter((v) => v.active).length
+                  ? variants.filter((v) => v.active).map((variant) => <option key={variant.id} value={variant.id}>{variant.variantName} · {variant.sku}</option>)
+                  : <option value="">Create an active variant first</option>}
+              </select>
+            </label>
+            <div className="pos-inventory-fields">
+              <label>Quantity change (+ / −)<input type="number" min="-1000000" max="1000000" step="1" value={adjustmentDelta} onChange={(e) => setAdjustmentDelta(e.target.value)} disabled={adjustmentRetry} required /></label>
+              <label>Reason<input value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} disabled={adjustmentRetry} maxLength={500} required /></label>
+            </div>
+            <small>Use a positive number to add stock and a negative number to remove stock. Adjustments cannot reduce on-hand below stock already reserved for online orders.</small>
+            {adjustmentRetry && <p className="pos-retry-note">A previous adjustment response was uncertain. Retry without changing the product, quantity or reason.</p>}
+            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId}>
+              {adjustmentSaving ? <><RefreshCw className="pos-spin" size={15} /> Adjusting…</> : adjustmentRetry ? <><RefreshCw size={15} /> Retry same adjustment</> : <><Plus size={16} /> Apply adjustment</>}
             </button>
           </form>
         </section>
