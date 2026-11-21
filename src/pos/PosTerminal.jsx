@@ -2267,7 +2267,7 @@ export default function PosTerminal() {
           {selectedSaleExchanges.length > 0 && <section className="pos-exchange-history">
             <h3>Exchange history</h3>
             {selectedSaleExchanges.map((exchange) => <div className="pos-exchange-history-row" key={exchange.id}>
-              <div><strong>Exchange #{exchange.id}</strong><small>{formatDate(exchange.createdAt)} · {exchange.processedByUsername}</small></div>
+              <div><strong>Exchange #{exchange.id}</strong><small>{formatDate(exchange.createdAt)} · {exchange.processedByUsername}</small><small>{exchange.reason}</small><small>Return {exchange.returnNumber} · Shift #{exchange.shiftId}</small></div>
               <div><span>Replacement</span><strong>{exchange.replacementInvoiceNumber}</strong></div>
               <div><span>Returned</span><strong>{money(exchange.returnedValue)}</strong></div>
               <div><span>Replacement value</span><strong>{money(exchange.replacementValue)}</strong></div>
