@@ -3,7 +3,7 @@ import {
   ArrowLeft, Search, RefreshCw, Plus, Minus, Trash2, Receipt,
   History, ShoppingCart, Store, Printer, X, CheckCircle2,
   AlertCircle, UserRound, CreditCard,
-  ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck, Truck
+  ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck, Truck, BarChart3
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./PosTerminal.css";
@@ -1574,7 +1574,7 @@ export default function PosTerminal() {
             <button type="button" className={`pos-tab-button ${activeTab === "checkout" ? "active" : ""}`} onClick={() => setActiveTab("checkout")}><ShoppingCart size={17} /> New sale</button>
             {canManageInventory && <button type="button" className={`pos-tab-button ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}><Package size={17} /> Inventory</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>}
-            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><ChartNoAxesCombined size={17} /> Reports</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><BarChart3 size={17} /> Reports</button>}
           </div>
         </div>
 
@@ -1762,7 +1762,7 @@ export default function PosTerminal() {
               <button type="button" className="pos-button primary" onClick={loadSalesReport} disabled={reportLoading || !reportFrom || !reportTo || reportTo < reportFrom}>Run report</button>
             </div>
             {reportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Calculating report…</span></div>
-              : !salesReport ? <div className="pos-empty-state"><ChartNoAxesCombined /><strong>No report loaded</strong><span>Choose a date range and run the report.</span></div>
+              : !salesReport ? <div className="pos-empty-state"><BarChart3 /><strong>No report loaded</strong><span>Choose a date range and run the report.</span></div>
                 : <>
                   <div className="pos-report-summary">
                     <article><span>Transactions</span><strong>{salesReport.transactionCount}</strong></article>
