@@ -40,15 +40,16 @@ Stock receipts are handled separately through the authenticated inventory receip
 
 ## Deliberate v1 exclusions
 
-This terminal does not claim to implement the complete retail operations suite. These features remain separate work:
+The operations branch now includes staff roles, register/shift cash reconciliation, customer returns, full sale voids, physical stock counts, supplier purchasing, goods receipt, supplier returns, reorder thresholds, low-stock alerts and date-scoped sales/refund reports.
 
-- Multi-register assignment policies, shift reopening, supervisor override thresholds and cross-register cash transfers. Basic register, shift, opening-float, cash-in/out and closing-reconciliation workflows are implemented.
-- Exchanges, sale voids, credit notes and automated provider refund execution. Manager/admin customer returns with audited refund records and stock disposition are now implemented; provider refunds still require external completion and reference capture.
-- GST/tax calculation and accountant-approved invoice numbering/wording.
-- Supplier purchasing, goods receipt, purchase returns and stock counts.
-- Full permission-code matrix, per-register restrictions and approval workflows. The first ADMIN/MANAGER/CASHIER role layer is now available; see the staff management notes below.
+The remaining exclusions are:
 
-These require approved shop/accounting policies and additive schema migrations. Completed sales must not be edited or deleted to simulate a return or refund.
+- Multi-register cashier assignment, shift reopening, supervisor override thresholds and cross-register cash transfers.
+- Credit notes, supplier accounts payable, supplier credit settlement and automated provider refund execution. UPI/card refunds must be completed externally and the confirmed reference recorded in POS.
+- GST/tax calculation, profit accounting, landed-cost accounting and accountant-approved invoice/tax wording.
+- A configurable permission-code matrix, per-register access restrictions and threshold-based approval workflows.
+
+These require shop-owner/accountant policy decisions. Completed sales remain immutable; returns and voids are separate, audited records and must never be simulated by editing or deleting the original sale.
 
 ## Deployment gate
 
