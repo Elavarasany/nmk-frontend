@@ -95,6 +95,9 @@ function ReceiptView({ sale, onClose }) {
             {(sale.payments || []).map((payment, index) => (
               <div key={index}><span>{payment.paymentMethod}</span><span>{money(payment.amount)}</span></div>
             ))}
+            {Number(sale.exchangeCreditApplied || 0) > 0 && <div><span>Exchange credit applied</span><span>{money(sale.exchangeCreditApplied)}</span></div>}
+            {Number(sale.exchangeActualRefund || 0) > 0 && <div><span>Refund issued on original sale</span><span>{money(sale.exchangeActualRefund)}</span></div>}
+            {sale.exchangeReference && <div><span>Exchange reference</span><span>EX-{sale.exchangeReference}</span></div>}
             {(sale.payments || []).filter((p) => p.paymentMethod === "CASH" && Number(p.changeAmount) > 0)
               .map((p, index) => <div key={`change-${index}`}><span>Change</span><span>{money(p.changeAmount)}</span></div>)}
           </div>
@@ -1795,7 +1798,20 @@ export default function PosTerminal() {
       setExchangePendingPayload(null);
       exchangePendingKey.current = null;
       setExchangeRetryPending(false);
-      setNotice(`Exchange #${result.id} recorded. Credit applied: ${money(result.creditApplied)}. Collected: ${money(result.amountCollected)}. Refunded: ${money(result.actualRefund)}.`);
+      let invoiceLoaded = false;
+      try {
+        const replacementSale = await apiRequest(`/admin/pos/sales/${result.replacementSaleId}`);
+        setReceipt({
+          ...replacementSale,
+          exchangeCreditApplied: result.creditApplied,
+          exchangeActualRefund: result.actualRefund,
+          exchangeReference: result.id,
+        });
+        invoiceLoaded = true;
+      } catch {
+        // The exchange is already committed; invoice retrieval must not trigger an exchange retry.
+      }
+      setNotice(`Exchange #${result.id} recorded. Credit applied: ${money(result.creditApplied)}. Collected: ${money(result.amountCollected)}. Refunded: ${money(result.actualRefund)}.${invoiceLoaded ? " Replacement invoice is ready to print." : " Replacement invoice is available in sales history."}`);
       await Promise.all([loadCatalog(), loadCurrentShift(), loadHistory(historyPage)]);
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
