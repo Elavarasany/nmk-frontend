@@ -1017,6 +1017,7 @@ export default function PosTerminal() {
   const staffRole = sessionStorage.getItem("adminRole") || "ADMIN";
   const canManageInventory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
+  const canApplyDiscount = staffRole === "ADMIN" || staffRole === "MANAGER";
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
   const [locationStockCountLocked, setLocationStockCountLocked] = useState(false);
@@ -1877,7 +1878,8 @@ export default function PosTerminal() {
               <div className="pos-cart-form">
                 <div className="pos-form-section-title"><UserRound size={16} /> Customer details <span>Optional</span></div>
                 <div className="pos-customer-fields"><input value={customerName} disabled={retryPending} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" maxLength={150} /><input value={customerPhone} disabled={retryPending} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone number" maxLength={30} inputMode="tel" /></div>
-                <div className="pos-discount-row"><label htmlFor="pos-discount">Discount (₹)</label><input id="pos-discount" type="number" min="0" max={subtotal} step="0.01" value={discount} disabled={retryPending} onChange={(e) => setDiscount(e.target.value)} /></div>
+                <div className="pos-discount-row"><label htmlFor="pos-discount">Discount (₹)</label><input id="pos-discount" type="number" min="0" max={subtotal} step="0.01" value={discount} disabled={retryPending || !canApplyDiscount} onChange={(e) => setDiscount(e.target.value)} /></div>
+                {!canApplyDiscount && <p className="pos-retry-note">Sale discounts require ADMIN or MANAGER approval.</p>}
               </div>
 
               <div className="pos-totals">
