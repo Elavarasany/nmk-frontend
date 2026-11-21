@@ -135,6 +135,226 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [stockCountDrafts, setStockCountDrafts] = useState({});
   const stockCountActive = stockCount && ["COUNTING", "READY_FOR_REVIEW"].includes(stockCount.status);
 
+  const [suppliers, setSuppliers] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [procurementLoading, setProcurementLoading] = useState(false);
+  const [procurementSaving, setProcurementSaving] = useState(false);
+  const [supplierName, setSupplierName] = useState("");
+  const [supplierContact, setSupplierContact] = useState("");
+  const [supplierPhone, setSupplierPhone] = useState("");
+  const [supplierEmail, setSupplierEmail] = useState("");
+  const [supplierAddress, setSupplierAddress] = useState("");
+  const [selectedSupplierId, setSelectedSupplierId] = useState("");
+  const [purchaseOrderNotes, setPurchaseOrderNotes] = useState("");
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
+  const [receivingOrder, setReceivingOrder] = useState(null);
+  const [goodsReceiptReason, setGoodsReceiptReason] = useState("");
+  const [goodsReceiptQuantities, setGoodsReceiptQuantities] = useState({});
+  const [goodsReceiptSaving, setGoodsReceiptSaving] = useState(false);
+  const [goodsReceiptRetry, setGoodsReceiptRetry] = useState(false);
+  const [goodsReceiptPayload, setGoodsReceiptPayload] = useState(null);
+  const goodsReceiptPending = useRef(null);
+  const [supplierReturnOrder, setSupplierReturnOrder] = useState(null);
+  const [supplierReturnReason, setSupplierReturnReason] = useState("");
+  const [supplierReturnQuantities, setSupplierReturnQuantities] = useState({});
+  const [supplierReturnSaving, setSupplierReturnSaving] = useState(false);
+  const [supplierReturnRetry, setSupplierReturnRetry] = useState(false);
+  const [supplierReturnPayload, setSupplierReturnPayload] = useState(null);
+  const supplierReturnPending = useRef(null);
+
+  const loadProcurement = useCallback(async () => {
+    setProcurementLoading(true);
+    try {
+      const [supplierData, orderData] = await Promise.all([
+        apiRequest("/admin/procurement/suppliers"),
+        apiRequest("/admin/procurement/purchase-orders"),
+      ]);
+      const supplierList = Array.isArray(supplierData) ? supplierData : [];
+      setSuppliers(supplierList);
+      setSelectedSupplierId((current) => current && supplierList.some((supplier) => String(supplier.id) === String(current) && supplier.active)
+        ? current : (supplierList.find((supplier) => supplier.active)?.id ? String(supplierList.find((supplier) => supplier.active).id) : ""));
+      setPurchaseOrders(Array.isArray(orderData) ? orderData : []);
+    } catch (err) { onError(err.message); }
+    finally { setProcurementLoading(false); }
+  }, [onError]);
+
+  const createSupplier = async (event) => {
+    event.preventDefault();
+    if (!supplierName.trim()) { onError("Supplier name is required."); return; }
+    setProcurementSaving(true);
+    onError("");
+    try {
+      const created = await apiRequest("/admin/procurement/suppliers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: supplierName.trim(),
+          contactName: supplierContact.trim() || null,
+          phone: supplierPhone.trim() || null,
+          email: supplierEmail.trim() || null,
+          address: supplierAddress.trim() || null,
+        }),
+      });
+      setSupplierName(""); setSupplierContact(""); setSupplierPhone(""); setSupplierEmail(""); setSupplierAddress("");
+      await loadProcurement();
+      setSelectedSupplierId(String(created.id));
+      onNotice(`Supplier ${created.name} created.`);
+    } catch (err) { onError(err.message); }
+    finally { setProcurementSaving(false); }
+  };
+
+  const createPurchaseOrder = async (event) => {
+    event.preventDefault();
+    if (!selectedSupplierId || !locationId) { onError("Choose an active supplier and store location."); return; }
+    const items = purchaseOrderItems.map((item) => ({
+      variantId: Number(item.variantId),
+      orderedQuantity: Number(item.orderedQuantity),
+      unitCost: Number(item.unitCost),
+    }));
+    if (!items.length || items.some((item) => !item.variantId || !Number.isInteger(item.orderedQuantity) || item.orderedQuantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost <= 0)) {
+      onError("Every purchase order line needs a variant, positive whole quantity and positive unit cost.");
+      return;
+    }
+    if (new Set(items.map((item) => item.variantId)).size !== items.length) {
+      onError("Each variant can appear only once in a purchase order.");
+      return;
+    }
+    setProcurementSaving(true);
+    onError("");
+    try {
+      const created = await apiRequest("/admin/procurement/purchase-orders", {
+        method: "POST",
+        body: JSON.stringify({
+          supplierId: Number(selectedSupplierId),
+          locationId: Number(locationId),
+          notes: purchaseOrderNotes.trim() || null,
+          items,
+        }),
+      });
+      setPurchaseOrderNotes("");
+      setPurchaseOrderItems([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
+      await loadProcurement();
+      onNotice(`Draft purchase order ${created.orderNumber} created.`);
+    } catch (err) { onError(err.message); }
+    finally { setProcurementSaving(false); }
+  };
+
+  const submitPurchaseOrder = async (order) => {
+    setProcurementSaving(true);
+    onError("");
+    try {
+      await apiRequest(`/admin/procurement/purchase-orders/${order.id}/submit`, { method: "POST" });
+      await loadProcurement();
+      onNotice(`Purchase order ${order.orderNumber} submitted to supplier.`);
+    } catch (err) { onError(err.message); }
+    finally { setProcurementSaving(false); }
+  };
+
+  const openGoodsReceipt = (order) => {
+    setReceivingOrder(order);
+    setGoodsReceiptReason("Supplier delivery checked against purchase order");
+    setGoodsReceiptQuantities({});
+    setGoodsReceiptRetry(false);
+    setGoodsReceiptPayload(null);
+    goodsReceiptPending.current = null;
+  };
+
+  const receivePurchaseOrderGoods = async () => {
+    if (!receivingOrder || !goodsReceiptReason.trim()) { onError("Goods receipt reason is required."); return; }
+    if (stockCountActive) { onError("Inventory is frozen during a physical stock count."); return; }
+    if (!goodsReceiptPayload) {
+      const items = receivingOrder.items
+        .filter((item) => Number(goodsReceiptQuantities[item.id] || 0) > 0)
+        .map((item) => ({ purchaseOrderItemId: item.id, quantity: Number(goodsReceiptQuantities[item.id]) }));
+      if (!items.length) { onError("Enter at least one received quantity."); return; }
+      if (items.some((item) => !Number.isInteger(item.quantity))) { onError("Received quantities must be whole numbers."); return; }
+      goodsReceiptPending.current = goodsReceiptPending.current || newIdempotencyKey();
+      setGoodsReceiptPayload({
+        reason: goodsReceiptReason.trim(),
+        idempotencyKey: goodsReceiptPending.current,
+        items,
+      });
+    }
+    const payload = goodsReceiptPayload || {
+      reason: goodsReceiptReason.trim(),
+      idempotencyKey: goodsReceiptPending.current,
+      items: receivingOrder.items
+        .filter((item) => Number(goodsReceiptQuantities[item.id] || 0) > 0)
+        .map((item) => ({ purchaseOrderItemId: item.id, quantity: Number(goodsReceiptQuantities[item.id]) })),
+    };
+    setGoodsReceiptSaving(true);
+    onError("");
+    try {
+      const receipt = await apiRequest(`/admin/procurement/purchase-orders/${receivingOrder.id}/receive`, {
+        method: "POST", body: JSON.stringify(payload),
+      });
+      setReceivingOrder(null);
+      setGoodsReceiptPayload(null);
+      goodsReceiptPending.current = null;
+      setGoodsReceiptRetry(false);
+      await Promise.all([loadProcurement(), onRefreshCatalog()]);
+      onNotice(`Goods receipt ${receipt.receiptNumber} saved and stock updated.`);
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setGoodsReceiptRetry(uncertain);
+      if (!uncertain) { setGoodsReceiptPayload(null); goodsReceiptPending.current = null; }
+      onError(`${err.message}${uncertain ? " Retry the exact same receipt; its idempotency key is retained." : ""}`);
+    } finally { setGoodsReceiptSaving(false); }
+  };
+
+  const openSupplierReturn = (order) => {
+    setSupplierReturnOrder(order);
+    setSupplierReturnReason("Goods returned to supplier");
+    setSupplierReturnQuantities({});
+    setSupplierReturnRetry(false);
+    setSupplierReturnPayload(null);
+    supplierReturnPending.current = null;
+  };
+
+  const returnPurchaseOrderGoods = async () => {
+    if (!supplierReturnOrder || !supplierReturnReason.trim()) { onError("Supplier return reason is required."); return; }
+    if (stockCountActive) { onError("Inventory is frozen during a physical stock count."); return; }
+    if (!supplierReturnPayload) {
+      const items = supplierReturnOrder.items
+        .filter((item) => Number(supplierReturnQuantities[item.id] || 0) > 0)
+        .map((item) => ({ purchaseOrderItemId: item.id, quantity: Number(supplierReturnQuantities[item.id]) }));
+      if (!items.length || items.some((item) => !Number.isInteger(item.quantity))) {
+        onError("Enter at least one whole supplier return quantity.");
+        return;
+      }
+      supplierReturnPending.current = supplierReturnPending.current || newIdempotencyKey();
+      setSupplierReturnPayload({
+        reason: supplierReturnReason.trim(),
+        idempotencyKey: supplierReturnPending.current,
+        items,
+      });
+    }
+    const payload = supplierReturnPayload || {
+      reason: supplierReturnReason.trim(),
+      idempotencyKey: supplierReturnPending.current,
+      items: supplierReturnOrder.items
+        .filter((item) => Number(supplierReturnQuantities[item.id] || 0) > 0)
+        .map((item) => ({ purchaseOrderItemId: item.id, quantity: Number(supplierReturnQuantities[item.id]) })),
+    };
+    setSupplierReturnSaving(true);
+    onError("");
+    try {
+      const result = await apiRequest(`/admin/procurement/purchase-orders/${supplierReturnOrder.id}/supplier-returns`, {
+        method: "POST", body: JSON.stringify(payload),
+      });
+      setSupplierReturnOrder(null);
+      setSupplierReturnPayload(null);
+      supplierReturnPending.current = null;
+      setSupplierReturnRetry(false);
+      await Promise.all([loadProcurement(), onRefreshCatalog()]);
+      onNotice(`Supplier return ${result.returnNumber} recorded and stock reduced.`);
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setSupplierReturnRetry(uncertain);
+      if (!uncertain) { setSupplierReturnPayload(null); supplierReturnPending.current = null; }
+      onError(`${err.message}${uncertain ? " Retry the exact same supplier return; its idempotency key is retained." : ""}`);
+    } finally { setSupplierReturnSaving(false); }
+  };
+
   const loadStockCount = useCallback(async () => {
     if (!locationId) { setStockCount(null); return; }
     setStockCountLoading(true);
@@ -262,6 +482,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { loadProducts(); }, [loadProducts]);
   useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
   useEffect(() => { loadStockCount(); }, [loadStockCount]);
+  useEffect(() => { loadProcurement(); }, [loadProcurement]);
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
 
