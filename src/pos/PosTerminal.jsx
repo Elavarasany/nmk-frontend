@@ -8,7 +8,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import "./PosTerminal.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() ||
+  (import.meta.env.DEV ? "http://localhost:8080/api" : "");
 const money = (value) => Number(value || 0).toLocaleString("en-IN", {
   style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2
 });
@@ -17,6 +18,9 @@ const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.() ||
   `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 async function apiRequest(path, options = {}) {
+  if (!API_BASE) {
+    throw new Error("POS API is not configured. Set VITE_API_BASE_URL to your deployed backend URL ending in /api.");
+  }
   const token = sessionStorage.getItem("adminToken");
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
