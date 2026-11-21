@@ -2425,7 +2425,7 @@ export default function PosTerminal() {
             {returnQuote > 0 && returnPaymentMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the refund in the UPI/card provider first. This POS records the reference; it does not send the provider refund.</p>}
             <div className="pos-modal-actions">
               <button type="button" className="pos-button secondary" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending}>Cancel</button>
-              <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || !shift?.id || shift.status !== "OPEN"}>
+              <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || !shift?.id || shift.status !== "OPEN" || !returnPassword.trim()}>
                 {returnSaving ? "Recording…" : returnRetryPending ? "Retry same return" : "Confirm return"}
               </button>
             </div>
