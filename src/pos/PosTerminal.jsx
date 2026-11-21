@@ -994,6 +994,14 @@ export default function PosTerminal() {
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
   const [selectedHistorySale, setSelectedHistorySale] = useState(null);
+  const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("Sale cancelled before customer leaves");
+  const [voidRefunds, setVoidRefunds] = useState([]);
+  const [voidSaving, setVoidSaving] = useState(false);
+  const [voidRetry, setVoidRetry] = useState(false);
+  const [voidPayload, setVoidPayload] = useState(null);
+  const [voidError, setVoidError] = useState("");
+  const voidPending = useRef(null);
   const [returnSale, setReturnSale] = useState(null);
   const [saleReturns, setSaleReturns] = useState([]);
   const [returnReason, setReturnReason] = useState("");
@@ -1199,6 +1207,69 @@ export default function PosTerminal() {
     } catch (err) { setError(err.message); }
     finally { setReportLoading(false); }
   }, [locationId, reportFrom, reportTo]);
+
+  const openVoidDialog = (sale) => {
+    setVoidReason("Sale cancelled before customer leaves");
+    setVoidRefunds((sale.payments || []).map((payment) => ({
+      paymentMethod: payment.paymentMethod,
+      amount: payment.amount,
+      transactionReference: payment.transactionReference || "",
+    })));
+    setVoidPayload(null);
+    voidPending.current = null;
+    setVoidRetry(false);
+    setVoidError("");
+    setVoidDialogOpen(true);
+  };
+
+  const submitVoid = async () => {
+    if (!selectedHistorySale || !shift?.id || !voidReason.trim()) {
+      setVoidError("An open manager shift and a void reason are required.");
+      return;
+    }
+    if (!voidPayload) {
+      voidPending.current = voidPending.current || newIdempotencyKey();
+      setVoidPayload({
+        shiftId: shift.id,
+        reason: voidReason.trim(),
+        idempotencyKey: voidPending.current,
+        refundPayments: voidRefunds.map((payment) => ({
+          paymentMethod: payment.paymentMethod,
+          amount: Number(payment.amount),
+          transactionReference: payment.transactionReference.trim() || null,
+        })),
+      });
+    }
+    const payload = voidPayload || {
+      shiftId: shift.id,
+      reason: voidReason.trim(),
+      idempotencyKey: voidPending.current,
+      refundPayments: voidRefunds.map((payment) => ({
+        paymentMethod: payment.paymentMethod,
+        amount: Number(payment.amount),
+        transactionReference: payment.transactionReference.trim() || null,
+      })),
+    };
+    setVoidSaving(true);
+    setVoidError("");
+    try {
+      const result = await apiRequest(`/admin/pos/sales/${selectedHistorySale.id}/void`, {
+        method: "POST", body: JSON.stringify(payload),
+      });
+      setVoidDialogOpen(false);
+      setSelectedHistorySale(null);
+      setVoidPayload(null);
+      voidPending.current = null;
+      setVoidRetry(false);
+      await Promise.all([loadHistory(historyPage), loadCatalog(), loadSalesReport()]);
+      setNotice(`Sale ${result.invoiceNumber} voided. Refund ${money(result.refundTotal)} recorded.`);
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setVoidRetry(uncertain);
+      setVoidError(`${err.message}${uncertain ? " Retry the exact same void request; its idempotency key is retained." : ""}`);
+      if (!uncertain) { setVoidPayload(null); voidPending.current = null; }
+    } finally { setVoidSaving(false); }
+  };
 
   const loadHistory = useCallback(async (page = 0) => {
     setHistoryLoading(true);
@@ -1816,6 +1887,7 @@ export default function PosTerminal() {
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button>
             {canViewHistory && <button type="button" className="pos-button secondary" onClick={beginReturn} disabled={returnLoading}>{returnLoading ? "Loading…" : "Process return"}</button>}
+            {canViewHistory && shift?.status === "OPEN" && <button type="button" className="pos-button secondary" onClick={() => openVoidDialog(selectedHistorySale)}>Void full sale</button>}
             <button type="button" className="pos-button primary" onClick={openReceiptFromHistory}><Printer size={17} /> Print invoice</button>
           </div>
         </section>
@@ -1891,6 +1963,30 @@ export default function PosTerminal() {
           </section>
         </div>
       )}
+      {voidDialogOpen && selectedHistorySale && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !voidSaving && !voidRetry) setVoidDialogOpen(false);
+      }}>
+        <section className="pos-procurement-modal pos-void-modal" role="dialog" aria-modal="true" aria-labelledby="pos-void-title">
+          <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">MANAGER ACTION</span><h2 id="pos-void-title">Void {selectedHistorySale.invoiceNumber}</h2></div>
+            <button type="button" className="pos-icon-button" onClick={() => setVoidDialogOpen(false)} disabled={voidSaving || voidRetry} aria-label="Close void dialog"><X /></button></div>
+          <p>A full void returns every line to stock and records a full refund. Use this only when the sale is being cancelled before goods leave the shop. A sale with an earlier return cannot be voided.</p>
+          {voidError && <p className="pos-return-error" role="alert">{voidError}</p>}
+          <label className="pos-return-field">Void reason<input value={voidReason} onChange={(event) => setVoidReason(event.target.value)} maxLength={500} disabled={voidSaving || voidRetry} /></label>
+          <h3>Refund allocation</h3>
+          {voidRefunds.map((payment, index) => <div className="pos-void-refund-row" key={index}>
+            <span><strong>{payment.paymentMethod}</strong><small>{money(payment.amount)}</small></span>
+            {payment.paymentMethod === "CASH" ? <span className="pos-void-cash-note">Cash refund recorded in your open shift</span>
+              : <label>Refund transaction reference<input value={payment.transactionReference} onChange={(event) => setVoidRefunds((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, transactionReference: event.target.value } : row))} maxLength={150} disabled={voidSaving || voidRetry} required /></label>}
+          </div>)}
+          {voidRefunds.length === 0 && <p className="pos-retry-note">This sale has no collected payment amount. The full sale will be voided without a cash refund.</p>}
+          <p className="pos-retry-note">Refunds to UPI/card must be completed through the payment provider or bank first. Enter the actual refund reference; this POS records the refund but does not send it to the provider.</p>
+          <div className="pos-modal-actions">
+            <button type="button" className="pos-button secondary" onClick={() => setVoidDialogOpen(false)} disabled={voidSaving || voidRetry}>Cancel</button>
+            <button type="button" className="pos-button primary" onClick={submitVoid} disabled={voidSaving || !shift?.id || !voidReason.trim()}>{voidSaving ? "Voiding…" : voidRetry ? "Retry same void" : "Confirm full void"}</button>
+          </div>
+        </section>
+      </div>}
+
       <ReceiptView sale={receipt} onClose={() => setReceipt(null)} />
     </main>
   );
