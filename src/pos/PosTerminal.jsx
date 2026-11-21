@@ -1238,7 +1238,7 @@ export default function PosTerminal() {
   const [locationId, setLocationId] = useState(() => String(readPendingCheckout()?.locationId || ""));
   const [locationStockCountLocked, setLocationStockCountLocked] = useState(false);
   const [registers, setRegisters] = useState([]);
-  const [registerId, setRegisterId] = useState("");
+  const [registerId, setRegisterId] = useState(() => String(readPendingOperation("nmk.pos.pending-open-shift.v1", (p) => p?.idempotencyKey && p?.registerId)?.registerId || ""));
   const [shift, setShift] = useState(null);
   const [shiftLoading, setShiftLoading] = useState(false);
   const [shiftSaving, setShiftSaving] = useState(false);
@@ -1332,6 +1332,14 @@ export default function PosTerminal() {
   const openShiftPayload = useRef(readPendingOperation("nmk.pos.pending-open-shift.v1", (p) => p?.idempotencyKey && p?.registerId));
   const cashMovementPayload = useRef(readPendingOperation("nmk.pos.pending-cash-movement.v1", (p) => p?.idempotencyKey && p?.shiftId && p?.amount > 0));
   const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (openShiftPayload.current) {
+      setNotice("An unfinished shift-opening request was recovered. Retry it to confirm the original request; do not create another shift.");
+    } else if (cashMovementPayload.current) {
+      setNotice("An unfinished drawer cash movement was recovered. Retry the saved movement to confirm its status; do not enter it again.");
+    }
+  }, []);
 
   const loadLocations = useCallback(async () => {
     setLocationsLoading(true);
