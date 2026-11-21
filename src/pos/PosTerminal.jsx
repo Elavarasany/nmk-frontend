@@ -128,6 +128,107 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [adjustmentRetry, setAdjustmentRetry] = useState(false);
   const adjustmentPayload = useRef(null);
+  const [stockCount, setStockCount] = useState(null);
+  const [stockCountLoading, setStockCountLoading] = useState(false);
+  const [stockCountSaving, setStockCountSaving] = useState(false);
+  const [stockCountReason, setStockCountReason] = useState("");
+  const [stockCountDrafts, setStockCountDrafts] = useState({});
+  const stockCountActive = stockCount && ["COUNTING", "READY_FOR_REVIEW"].includes(stockCount.status);
+
+  const loadStockCount = useCallback(async () => {
+    if (!locationId) { setStockCount(null); return; }
+    setStockCountLoading(true);
+    try {
+      const data = await apiRequest(`/admin/inventory/stock-counts/current?locationId=${encodeURIComponent(locationId)}`);
+      setStockCount(data || null);
+      setStockCountDrafts({});
+    } catch (err) { onError(err.message); }
+    finally { setStockCountLoading(false); }
+  }, [locationId, onError]);
+
+  const startStockCount = async () => {
+    if (!locationId || !stockCountReason.trim()) {
+      onError("Enter a reason before starting the physical stock count.");
+      return;
+    }
+    setStockCountSaving(true);
+    onError("");
+    try {
+      const data = await apiRequest("/admin/inventory/stock-counts/start", {
+        method: "POST",
+        body: JSON.stringify({ locationId: Number(locationId), reason: stockCountReason.trim() }),
+      });
+      setStockCount(data);
+      setStockCountDrafts({});
+      setStockCountReason("");
+      onNotice("Physical stock count started. Stock movements are frozen until it is posted or cancelled.");
+    } catch (err) { onError(err.message); }
+    finally { setStockCountSaving(false); }
+  };
+
+  const saveStockCountLine = async (line) => {
+    const raw = stockCountDrafts[line.id] ?? line.countedQuantity;
+    const countedQuantity = Number(raw);
+    if (!Number.isInteger(countedQuantity) || countedQuantity < 0) {
+      onError("Counted quantity must be a non-negative whole number.");
+      return;
+    }
+    setStockCountSaving(true);
+    onError("");
+    try {
+      const updated = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/lines/${line.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ countedQuantity }),
+      });
+      setStockCount((current) => ({
+        ...current,
+        lines: current.lines.map((item) => item.id === updated.id ? updated : item),
+        countedLineCount: current.lines.filter((item) => item.id === updated.id || item.countedQuantity != null).length,
+      }));
+      setStockCountDrafts((current) => { const next = { ...current }; delete next[line.id]; return next; });
+    } catch (err) { onError(err.message); }
+    finally { setStockCountSaving(false); }
+  };
+
+  const submitStockCount = async () => {
+    if (!stockCount?.id) return;
+    setStockCountSaving(true);
+    onError("");
+    try {
+      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/submit`, { method: "POST" });
+      setStockCount(data);
+      onNotice("Stock count submitted for review.");
+    } catch (err) { onError(err.message); }
+    finally { setStockCountSaving(false); }
+  };
+
+  const postStockCount = async () => {
+    if (!stockCount?.id) return;
+    if (!window.confirm("Post all stock count variances? This will create permanent stock ledger movements.")) return;
+    setStockCountSaving(true);
+    onError("");
+    try {
+      const data = await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/post`, { method: "POST" });
+      setStockCount(null);
+      setStockCountDrafts({});
+      await onRefreshCatalog();
+      onNotice(`Stock count #${data.id} posted. ${data.varianceLineCount} stock variances were applied.`);
+    } catch (err) { onError(err.message); }
+    finally { setStockCountSaving(false); }
+  };
+
+  const cancelStockCount = async () => {
+    if (!stockCount?.id || !window.confirm("Cancel this stock count and unfreeze inventory? No stock adjustments will be posted.")) return;
+    setStockCountSaving(true);
+    onError("");
+    try {
+      await apiRequest(`/admin/inventory/stock-counts/${stockCount.id}/cancel`, { method: "POST" });
+      setStockCount(null);
+      setStockCountDrafts({});
+      onNotice("Stock count cancelled. Inventory operations are available again.");
+    } catch (err) { onError(err.message); }
+    finally { setStockCountSaving(false); }
+  };
 
   const loadProducts = useCallback(async () => {
     setProductsLoading(true);
@@ -156,12 +257,14 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
   useEffect(() => { if (selectedProductId) loadVariants(selectedProductId); else setVariants([]); }, [selectedProductId, loadVariants]);
+  useEffect(() => { loadStockCount(); }, [loadStockCount]);
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
 
   const createVariant = async (event) => {
     event.preventDefault();
     onError("");
+    if (stockCountActive) { onError("Cancel or post the active stock count before changing the catalogue."); return; }
     if (!selectedProductId) { onError("Choose a product before creating a variant."); return; }
     let attributes;
     try {
@@ -195,6 +298,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const receiveStock = async (event) => {
     event.preventDefault();
     onError("");
+    if (stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
     if (!locationId) { onError("Choose an active inventory location."); return; }
     if (!selectedVariantId) { onError("Create or select an active variant first."); return; }
     if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0) {
@@ -236,6 +340,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const adjustStock = async (event) => {
     event.preventDefault();
     onError("");
+    if (stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
     if (!locationId) { onError("Choose an active inventory location."); return; }
     if (!selectedVariantId) { onError("Choose an active variant before adjusting stock."); return; }
     const delta = Number(adjustmentDelta);
@@ -285,6 +390,46 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         <div><span className="pos-eyebrow">CATALOGUE & STOCK CONTROL</span><h2>Inventory setup</h2><p>Create sellable variants and receive physical stock into the selected store location.</p></div>
         <button type="button" className="pos-button secondary compact" onClick={() => { loadProducts(); onRefreshCatalog(); }} disabled={productsLoading || variantsLoading}><RefreshCw size={15} /> Refresh inventory</button>
       </div>
+      <section className="pos-inventory-card pos-stock-count-card">
+        <div className="pos-inventory-card-heading"><ClipboardCheck size={18} /><div><h3>Physical stock count</h3><p>Freeze stock movements, count every sellable variant and post verified variances to the stock ledger.</p></div></div>
+        {stockCountLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Checking active stock count…</span></div>
+          : !stockCount ? (
+            <div className="pos-stock-count-start">
+              <label>Reason for count<input value={stockCountReason} onChange={(event) => setStockCountReason(event.target.value)} maxLength={500} placeholder="Monthly physical inventory count" /></label>
+              <button type="button" className="pos-button primary" onClick={startStockCount} disabled={stockCountSaving || !locationId || !stockCountReason.trim()}>
+                {stockCountSaving ? "Starting…" : "Start physical count"}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="pos-stock-count-summary">
+                <span>Session #{stockCount.id} · {stockCount.status.replaceAll("_", " ")}</span>
+                <strong>{stockCount.countedLineCount} / {stockCount.lineCount} counted · {stockCount.varianceLineCount} variances</strong>
+              </div>
+              <div className="pos-stock-count-table">
+                <table><thead><tr><th>Product / SKU</th><th>Expected</th><th>Counted</th><th>Variance</th><th></th></tr></thead>
+                  <tbody>{stockCount.lines.map((line) => <tr key={line.id}>
+                    <td><strong>{line.productName}</strong><small>{line.variantName} · {line.sku}</small></td>
+                    <td>{line.snapshotOnHand}</td>
+                    <td>{stockCount.status === "COUNTING"
+                      ? <input type="number" min="0" step="1" value={stockCountDrafts[line.id] ?? (line.countedQuantity ?? "")}
+                          onChange={(event) => setStockCountDrafts((current) => ({ ...current, [line.id]: event.target.value }))} disabled={stockCountSaving} />
+                      : line.countedQuantity}</td>
+                    <td>{line.variance == null ? "—" : <strong className={line.variance === 0 ? "" : line.variance > 0 ? "pos-count-positive" : "pos-count-negative"}>{line.variance > 0 ? "+" : ""}{line.variance}</strong>}</td>
+                    <td>{stockCount.status === "COUNTING" && <button type="button" className="pos-button secondary compact" onClick={() => saveStockCountLine(line)} disabled={stockCountSaving || stockCountDrafts[line.id] == null && line.countedQuantity != null}>Save</button>}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+              <div className="pos-stock-count-actions">
+                {stockCount.status === "COUNTING" && <button type="button" className="pos-button primary" onClick={submitStockCount} disabled={stockCountSaving || stockCount.countedLineCount !== stockCount.lineCount}>Submit for review</button>}
+                {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving}>Post stock variances</button>}
+                <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving}>Cancel count</button>
+              </div>
+              <p className="pos-retry-note">Stock receiving, adjustments, online reservations and POS sales are blocked until this count is posted or cancelled.</p>
+            </>
+          )}
+      </section>
+
       <div className="pos-inventory-grid">
         <section className="pos-inventory-card">
           <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Create product variant</h3><p>Each sellable colour/size combination needs its own SKU.</p></div></div>
@@ -304,7 +449,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <textarea value={variantForm.attributes} onChange={(e) => updateVariantForm("attributes", e.target.value)} rows={3} placeholder='{"color":"Black","size":"Medium"}' spellCheck="false" />
               <small>Example: {"{\"color\":\"Black\",\"size\":\"Medium\"}"}. Attributes are saved with the SKU.</small>
             </label>
-            <button type="submit" className="pos-button primary" disabled={variantSaving || productsLoading || !selectedProductId}>
+            <button type="submit" className="pos-button primary" disabled={variantSaving || productsLoading || !selectedProductId || stockCountActive}>
               {variantSaving ? <><RefreshCw className="pos-spin" size={15} /> Creating…</> : <><Plus size={16} /> Create variant</>}
             </button>
           </form>
@@ -330,7 +475,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <label>Reason<input value={reason} onChange={(e) => setReason(e.target.value)} disabled={receiptRetry} maxLength={500} required /></label>
             </div>
             {receiptRetry && <p className="pos-retry-note">A previous receipt response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId}>
+            <button type="submit" className="pos-button primary" disabled={receiptSaving || !locationId || !selectedVariantId || stockCountActive}>
               {receiptSaving ? <><RefreshCw className="pos-spin" size={15} /> Receiving…</> : receiptRetry ? <><RefreshCw size={15} /> Retry same receipt</> : <><Plus size={16} /> Receive stock</>}
             </button>
           </form>
@@ -357,7 +502,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
             </div>
             <small>Use a positive number to add stock and a negative number to remove stock. Adjustments cannot reduce on-hand below stock already reserved for online orders.</small>
             {adjustmentRetry && <p className="pos-retry-note">A previous adjustment response was uncertain. Retry without changing the product, quantity or reason.</p>}
-            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId}>
+            <button type="submit" className="pos-button primary" disabled={adjustmentSaving || !locationId || !selectedVariantId || stockCountActive}>
               {adjustmentSaving ? <><RefreshCw className="pos-spin" size={15} /> Adjusting…</> : adjustmentRetry ? <><RefreshCw size={15} /> Retry same adjustment</> : <><Plus size={16} /> Apply adjustment</>}
             </button>
           </form>
