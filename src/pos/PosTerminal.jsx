@@ -352,6 +352,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setPurchaseOrderSubmitTarget(order);
   };
 
+  const closePurchaseOrderSubmit = () => {
+    if (procurementSaving) return;
+    setPurchaseOrderSubmitTarget(null);
+    setPurchaseOrderSubmitPassword("");
+    setProcurementActionError("");
+  };
+
   const submitPurchaseOrder = async () => {
     if (!purchaseOrderSubmitTarget) return;
     setProcurementSaving(true);
@@ -1032,17 +1039,17 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       </div>
 
       {purchaseOrderSubmitTarget && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !procurementSaving) setPurchaseOrderSubmitTarget(null);
+        if (event.target === event.currentTarget) closePurchaseOrderSubmit();
       }}>
         <section className="pos-procurement-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-order-submit-title">
           <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">PURCHASE ORDER</span><h2 id="purchase-order-submit-title">{purchaseOrderSubmitTarget.orderNumber}</h2></div>
-            <button type="button" className="pos-icon-button" onClick={() => setPurchaseOrderSubmitTarget(null)} disabled={procurementSaving} aria-label="Close purchase order confirmation"><X /></button></div>
+            <button type="button" className="pos-icon-button" onClick={closePurchaseOrderSubmit} disabled={procurementSaving} aria-label="Close purchase order confirmation"><X /></button></div>
           <p>Submitting changes this draft into an order placed with the supplier. Confirm the order details before continuing.</p>
           <label className="pos-return-field">Confirm staff password<input type="password" autoComplete="current-password"
             value={purchaseOrderSubmitPassword} onChange={(event) => setPurchaseOrderSubmitPassword(event.target.value)}
             disabled={procurementSaving} placeholder="Required to submit purchase order" /></label>
           <div className="pos-modal-actions">
-            <button type="button" className="pos-button secondary" onClick={() => setPurchaseOrderSubmitTarget(null)} disabled={procurementSaving}>Cancel</button>
+            <button type="button" className="pos-button secondary" onClick={closePurchaseOrderSubmit} disabled={procurementSaving}>Cancel</button>
             <button type="button" className="pos-button primary" onClick={submitPurchaseOrder}
               disabled={procurementSaving || !purchaseOrderSubmitPassword.trim()}>{procurementSaving ? "Submitting…" : "Confirm and submit order"}</button>
           </div>
