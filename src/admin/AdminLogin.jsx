@@ -41,11 +41,12 @@ export default function AdminLogin() {
                 throw new Error(data.message || "Login failed");
             }
 
+            const role = data.role || "CASHIER";
             sessionStorage.setItem("adminToken", data.token);
             sessionStorage.setItem("adminUsername", data.username);
-            sessionStorage.setItem("adminRole", data.role || "CASHIER");
+            sessionStorage.setItem("adminRole", role);
 
-            navigate(data.role && data.role !== "ADMIN" ? "/admin/pos" : "/admin/dashboard");
+            navigate(role === "ADMIN" ? "/admin/dashboard" : "/admin/pos");
 
         } catch (err) {
             setError(err.message || "Unable to connect to server");
