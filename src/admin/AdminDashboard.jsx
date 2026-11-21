@@ -1586,7 +1586,7 @@ function DashboardPage({ api, products, orders, appointments, refreshing, onRefr
                 <th scope="col">Product</th>
                 <th scope="col">Category</th>
                 <th scope="col">Price</th>
-                <th scope="col">Stock</th>
+                <th scope="col">Legacy stock</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -2247,7 +2247,7 @@ const handleProductCsvImport = async (e) => {
                     {formatINR(product.price, true)}
                   </td>
 
-                  <td data-label="Stock">
+                  <td data-label="Legacy stock">
                     {product.stockQuantity ?? 0}
                   </td>
 
@@ -2356,7 +2356,7 @@ const handleProductCsvImport = async (e) => {
                 />
               </FormGroup>
 
-              <FormGroup id="product-stock" label="Stock Quantity" required>
+              <FormGroup id="product-stock" label="Legacy Stock Quantity (not used for POS availability)" required>
                 <input
                   id="product-stock"
                   type="number"
@@ -2365,7 +2365,7 @@ const handleProductCsvImport = async (e) => {
                   step="1"
                   value={form.stockQuantity}
                   onChange={handleChange}
-                  placeholder="Enter stock quantity"
+                  placeholder="Legacy product field only"
                   required
                 />
               </FormGroup>
