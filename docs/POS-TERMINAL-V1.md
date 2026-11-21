@@ -41,7 +41,7 @@ This terminal does not claim to implement the complete retail operations suite. 
 - Returns, exchanges, refunds, voids and credit notes.
 - GST/tax calculation and accountant-approved invoice numbering/wording.
 - Supplier purchasing, goods receipt, purchase returns and stock counts.
-- Fine-grained OWNER/MANAGER/CASHIER role and approval matrix.
+- Full permission-code matrix, per-register restrictions and approval workflows. The first ADMIN/MANAGER/CASHIER role layer is now available; see the staff management notes below.
 
 These require approved shop/accounting policies and additive schema migrations. Completed sales must not be edited or deleted to simulate a return or refund.
 
@@ -59,3 +59,16 @@ The Inventory tab now also supports an authenticated stock adjustment for verifi
 - The exact same request must be retried after an uncertain network response.
 - The backend prevents adjustments from reducing on-hand below stock reserved for online orders and writes an append-only stock movement.
 - Supplier deliveries must still use stock receipt. This adjustment form is not a full stock-count session with frozen snapshots or approval workflow.
+
+
+## Staff roles (operations branch)
+
+Administrators can create and manage staff accounts from Admin → Staff. Staff passwords must be at least 12 characters and are BCrypt-hashed by the backend. Existing admin accounts retain the ADMIN role by default after the additive migration.
+
+- ADMIN: full admin portal, POS, staff management and inventory operations.
+- MANAGER: POS checkout, sales history and inventory receipt/adjustment APIs.
+- CASHIER: POS checkout and product/location lookup only; no all-sales history, inventory adjustments or admin portal.
+
+Disabled staff accounts are rejected at login and their previously issued tokens are rejected on subsequent API requests. A staff member cannot disable their own account, and the final active administrator cannot be disabled or demoted.
+
+Backend migration: `nmk-backend/src/main/resources/db/manual/006-add-staff-roles.sql`. This migration is manual and additive. It must be reviewed and tested on a disposable staging copy before use; it has not been run against any live/client database.
