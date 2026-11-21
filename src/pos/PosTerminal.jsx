@@ -1395,33 +1395,43 @@ export default function PosTerminal() {
 
   const getReturnLineInfo = (item) => {
     if (!returnSale) return { remaining: 0, refund: 0 };
+    const toCents = (value) => Math.round((Number(value) || 0) * 100);
+    const fromCents = (value) => value / 100;
+    const roundDivideHalfUp = (numerator, denominator) =>
+      denominator > 0 ? Math.floor((numerator + denominator / 2) / denominator) : 0;
+
     const previous = saleReturns.flatMap((record) => record.items || [])
       .filter((returned) => Number(returned.saleItemId) === Number(item.id));
     const returnedQuantity = previous.reduce((sum, returned) => sum + Number(returned.quantity || 0), 0);
-    const previouslyRefunded = previous.reduce((sum, returned) => sum + Number(returned.refundAmount || 0), 0);
-    const remaining = Math.max(0, Number(item.quantity || 0) - returnedQuantity);
+    const previouslyRefundedCents = previous.reduce((sum, returned) => sum + toCents(returned.refundAmount), 0);
+    const soldQuantity = Math.max(0, Number(item.quantity || 0));
+    const remaining = Math.max(0, soldQuantity - returnedQuantity);
     const quantity = Math.min(remaining, Math.max(0, Number(returnQuantities[item.id] || 0)));
+
+    // Match the backend's ordered, cent-precise discount allocation exactly:
+    // round each proportional share HALF_UP, cap it at the remaining discount,
+    // and assign the final remainder to the last sale line.
     const sorted = [...(returnSale.items || [])].sort((a, b) => Number(a.id) - Number(b.id));
-    let allocatedDiscount = 0;
-    let lineDiscount = 0;
-    const subtotalValue = Number(returnSale.subtotal || 0);
-    const totalDiscount = Number(returnSale.discountAmount || 0);
+    const subtotalCents = toCents(returnSale.subtotal);
+    const totalDiscountCents = toCents(returnSale.discountAmount);
+    let allocatedDiscountCents = 0;
+    let lineDiscountCents = 0;
     sorted.forEach((saleLine, index) => {
-      const lineGross = Number(saleLine.lineTotal || 0);
-      const share = index === sorted.length - 1
-        ? Number((totalDiscount - allocatedDiscount).toFixed(2))
-        : subtotalValue > 0
-          ? Number((totalDiscount * lineGross / subtotalValue).toFixed(2))
-          : 0;
-      if (Number(saleLine.id) === Number(item.id)) lineDiscount = share;
-      allocatedDiscount += share;
+      const lineGrossCents = toCents(saleLine.lineTotal);
+      let shareCents = index === sorted.length - 1
+        ? totalDiscountCents - allocatedDiscountCents
+        : roundDivideHalfUp(totalDiscountCents * lineGrossCents, subtotalCents);
+      shareCents = Math.max(0, Math.min(shareCents, totalDiscountCents - allocatedDiscountCents));
+      if (Number(saleLine.id) === Number(item.id)) lineDiscountCents = shareCents;
+      allocatedDiscountCents += shareCents;
     });
-    const netLine = Math.max(0, Number((Number(item.lineTotal || 0) - lineDiscount).toFixed(2)));
-    const refund = quantity === 0 ? 0
+
+    const netLineCents = Math.max(0, toCents(item.lineTotal) - lineDiscountCents);
+    const refundCents = quantity === 0 ? 0
       : quantity === remaining
-        ? Math.max(0, Number((netLine - previouslyRefunded).toFixed(2)))
-        : Number((netLine * quantity / Number(item.quantity || 1)).toFixed(2));
-    return { remaining, refund };
+        ? Math.max(0, netLineCents - previouslyRefundedCents)
+        : roundDivideHalfUp(netLineCents * quantity, Math.max(1, soldQuantity));
+    return { remaining, refund: fromCents(refundCents) };
   };
 
   const returnQuote = useMemo(() => {
