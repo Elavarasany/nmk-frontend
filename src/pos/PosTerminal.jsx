@@ -836,6 +836,18 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { loadLowStock(); }, [loadLowStock]);
   useEffect(() => { loadMovementHistory(0); }, [loadMovementHistory]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
+  useEffect(() => {
+    if (!purchaseOrderPayload) return;
+    setSelectedSupplierId(String(purchaseOrderPayload.supplierId));
+    setLocationId(String(purchaseOrderPayload.locationId));
+    setPurchaseOrderNotes(purchaseOrderPayload.notes || "");
+    setPurchaseOrderItems(purchaseOrderPayload.items.map((item) => ({
+      variantId: String(item.variantId),
+      orderedQuantity: String(item.orderedQuantity),
+      unitCost: String(item.unitCost),
+    })));
+  }, [purchaseOrderPayload]);
+
 
   const updateVariantForm = (field, value) => setVariantForm((current) => ({ ...current, [field]: value }));
 
@@ -1237,7 +1249,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           {goodsReceiptRetry && <p className="pos-retry-note">Retry the exact same receipt. Its original idempotency key is retained.</p>}
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setReceivingOrder(null)} disabled={goodsReceiptSaving || goodsReceiptRetry}>Cancel</button>
-            <button type="button" className="pos-button primary" onClick={receivePurchaseOrderGoods} disabled={goodsReceiptSaving || stockCountActive || !goodsReceiptPassword.trim()}>{goodsReceiptSaving ? "Receiving…" : goodsReceiptRetry ? "Retry same receipt" : "Confirm goods receipt"}</button>
+            <button type="button" className="pos-button primary" onClick={receivePurchaseOrderGoods} disabled={goodsReceiptSaving || (!goodsReceiptPayload && stockCountActive) || !goodsReceiptPassword.trim()}>{goodsReceiptSaving ? "Receiving…" : goodsReceiptRetry ? "Retry same receipt" : "Confirm goods receipt"}</button>
           </div>
         </section>
       </div>}
@@ -1266,7 +1278,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           {supplierReturnRetry && <p className="pos-retry-note">Retry the exact same supplier return. Its original idempotency key is retained.</p>}
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSupplierReturnOrder(null)} disabled={supplierReturnSaving || supplierReturnRetry}>Cancel</button>
-            <button type="button" className="pos-button primary" onClick={returnPurchaseOrderGoods} disabled={supplierReturnSaving || stockCountActive || !supplierReturnPassword.trim()}>{supplierReturnSaving ? "Recording…" : supplierReturnRetry ? "Retry same return" : "Confirm supplier return"}</button>
+            <button type="button" className="pos-button primary" onClick={returnPurchaseOrderGoods} disabled={supplierReturnSaving || (!supplierReturnPayload && stockCountActive) || !supplierReturnPassword.trim()}>{supplierReturnSaving ? "Recording…" : supplierReturnRetry ? "Retry same return" : "Confirm supplier return"}</button>
           </div>
         </section>
       </div>}
