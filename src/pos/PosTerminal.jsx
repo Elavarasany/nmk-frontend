@@ -153,6 +153,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [goodsReceiptSaving, setGoodsReceiptSaving] = useState(false);
   const [goodsReceiptRetry, setGoodsReceiptRetry] = useState(false);
   const [goodsReceiptPayload, setGoodsReceiptPayload] = useState(null);
+  const [procurementActionError, setProcurementActionError] = useState("");
   const goodsReceiptPending = useRef(null);
   const [supplierReturnOrder, setSupplierReturnOrder] = useState(null);
   const [supplierReturnReason, setSupplierReturnReason] = useState("");
@@ -250,6 +251,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   };
 
   const openGoodsReceipt = (order) => {
+    setProcurementActionError("");
     setReceivingOrder(order);
     setGoodsReceiptReason("Supplier delivery checked against purchase order");
     setGoodsReceiptQuantities({});
@@ -259,8 +261,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   };
 
   const receivePurchaseOrderGoods = async () => {
-    if (!receivingOrder || !goodsReceiptReason.trim()) { onError("Goods receipt reason is required."); return; }
-    if (stockCountActive) { onError("Inventory is frozen during a physical stock count."); return; }
+    if (!receivingOrder || !goodsReceiptReason.trim()) { setProcurementActionError("Goods receipt reason is required."); onError("Goods receipt reason is required."); return; }
+    if (stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
     if (!goodsReceiptPayload) {
       const items = receivingOrder.items
         .filter((item) => Number(goodsReceiptQuantities[item.id] || 0) > 0)
@@ -291,17 +293,20 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setGoodsReceiptPayload(null);
       goodsReceiptPending.current = null;
       setGoodsReceiptRetry(false);
+      setProcurementActionError("");
       await Promise.all([loadProcurement(), onRefreshCatalog()]);
       onNotice(`Goods receipt ${receipt.receiptNumber} saved and stock updated.`);
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setGoodsReceiptRetry(uncertain);
+      setProcurementActionError(`${err.message}${uncertain ? " Retry the exact same receipt; its idempotency key is retained." : ""}`);
       if (!uncertain) { setGoodsReceiptPayload(null); goodsReceiptPending.current = null; }
-      onError(`${err.message}${uncertain ? " Retry the exact same receipt; its idempotency key is retained." : ""}`);
+      onError(err.message);
     } finally { setGoodsReceiptSaving(false); }
   };
 
   const openSupplierReturn = (order) => {
+    setProcurementActionError("");
     setSupplierReturnOrder(order);
     setSupplierReturnReason("Goods returned to supplier");
     setSupplierReturnQuantities({});
@@ -311,8 +316,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   };
 
   const returnPurchaseOrderGoods = async () => {
-    if (!supplierReturnOrder || !supplierReturnReason.trim()) { onError("Supplier return reason is required."); return; }
-    if (stockCountActive) { onError("Inventory is frozen during a physical stock count."); return; }
+    if (!supplierReturnOrder || !supplierReturnReason.trim()) { setProcurementActionError("Supplier return reason is required."); onError("Supplier return reason is required."); return; }
+    if (stockCountActive) { setProcurementActionError("Inventory is frozen during a physical stock count."); onError("Inventory is frozen during a physical stock count."); return; }
     if (!supplierReturnPayload) {
       const items = supplierReturnOrder.items
         .filter((item) => Number(supplierReturnQuantities[item.id] || 0) > 0)
@@ -345,13 +350,15 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setSupplierReturnPayload(null);
       supplierReturnPending.current = null;
       setSupplierReturnRetry(false);
+      setProcurementActionError("");
       await Promise.all([loadProcurement(), onRefreshCatalog()]);
       onNotice(`Supplier return ${result.returnNumber} recorded and stock reduced.`);
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
       setSupplierReturnRetry(uncertain);
+      setProcurementActionError(`${err.message}${uncertain ? " Retry the exact same supplier return; its idempotency key is retained." : ""}`);
       if (!uncertain) { setSupplierReturnPayload(null); supplierReturnPending.current = null; }
-      onError(`${err.message}${uncertain ? " Retry the exact same supplier return; its idempotency key is retained." : ""}`);
+      onError(err.message);
     } finally { setSupplierReturnSaving(false); }
   };
 
@@ -815,6 +822,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">GOODS RECEIPT</span><h2 id="goods-receipt-title">{receivingOrder.orderNumber}</h2></div>
             <button type="button" className="pos-icon-button" onClick={() => setReceivingOrder(null)} disabled={goodsReceiptSaving || goodsReceiptRetry} aria-label="Close goods receipt"><X /></button></div>
           <p>Enter quantities physically received. The backend rejects quantities above the outstanding order balance.</p>
+          {procurementActionError && <p className="pos-return-error" role="alert">{procurementActionError}</p>}
           {receivingOrder.items.filter((item) => item.outstandingQuantity > 0).map((item) => <label className="pos-procurement-quantity-row" key={item.id}>
             <span><strong>{item.productName}</strong><small>{item.variantName} · {item.sku} · Outstanding {item.outstandingQuantity}</small></span>
             <input type="number" min="0" max={item.outstandingQuantity} step="1" value={goodsReceiptQuantities[item.id] || ""}
@@ -837,6 +845,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">SUPPLIER RETURN</span><h2 id="supplier-return-title">{supplierReturnOrder.orderNumber}</h2></div>
             <button type="button" className="pos-icon-button" onClick={() => setSupplierReturnOrder(null)} disabled={supplierReturnSaving || supplierReturnRetry} aria-label="Close supplier return"><X /></button></div>
           <p>Return received goods to the supplier. The backend prevents returning more than the received quantity or removing reserved stock.</p>
+          {procurementActionError && <p className="pos-return-error" role="alert">{procurementActionError}</p>}
           {supplierReturnOrder.items.filter((item) => item.receivedQuantity > item.returnedQuantity).map((item) => {
             const returnable = item.receivedQuantity - item.returnedQuantity;
             return <label className="pos-procurement-quantity-row" key={item.id}>
