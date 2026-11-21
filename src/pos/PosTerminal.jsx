@@ -1066,6 +1066,8 @@ export default function PosTerminal() {
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
   const [selectedHistorySale, setSelectedHistorySale] = useState(null);
+  const [selectedSaleReturns, setSelectedSaleReturns] = useState(null);
+  const [saleReturnsLoading, setSaleReturnsLoading] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("Sale cancelled before customer leaves");
   const [voidRefunds, setVoidRefunds] = useState([]);
@@ -1281,6 +1283,14 @@ export default function PosTerminal() {
   }, [locationId, reportFrom, reportTo]);
 
   const openVoidDialog = (sale) => {
+    if (selectedSaleReturns === null) {
+      setError("Return history could not be verified. Close and reopen this transaction before attempting a full void.");
+      return;
+    }
+    if (selectedSaleReturns.length > 0) {
+      setError("A full void is not allowed because this sale already has a return or void record.");
+      return;
+    }
     setVoidReason("Sale cancelled before customer leaves");
     setVoidRefunds((sale.payments || []).map((payment) => ({
       paymentMethod: payment.paymentMethod,
@@ -1676,10 +1686,18 @@ export default function PosTerminal() {
 
   const openHistorySale = async (sale) => {
     setSelectedHistorySale(sale);
+    setSelectedSaleReturns(null);
+    setSaleReturnsLoading(true);
     try {
       const full = await apiRequest(`/admin/pos/sales/${sale.id}`);
       setSelectedHistorySale(full);
-    } catch (err) { setError(err.message); }
+      const rows = await apiRequest(`/admin/pos/sales/${sale.id}/returns`);
+      setSelectedSaleReturns(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaleReturnsLoading(false);
+    }
   };
 
   const openReceiptFromHistory = () => {
@@ -1959,7 +1977,11 @@ export default function PosTerminal() {
           <div className="pos-modal-actions">
             <button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button>
             {canViewHistory && <button type="button" className="pos-button secondary" onClick={beginReturn} disabled={returnLoading}>{returnLoading ? "Loading…" : "Process return"}</button>}
-            {canViewHistory && shift?.status === "OPEN" && <button type="button" className="pos-button secondary" onClick={() => openVoidDialog(selectedHistorySale)}>Void full sale</button>}
+            {canViewHistory && shift?.status === "OPEN" && selectedSaleReturns?.length === 0 &&
+              <button type="button" className="pos-button secondary" onClick={() => openVoidDialog(selectedHistorySale)} disabled={saleReturnsLoading}>Void full sale</button>}
+            {canViewHistory && selectedSaleReturns?.length > 0 &&
+              <p className="pos-return-note">Full void unavailable: this sale already has a return or void record.</p>}
+            {canViewHistory && saleReturnsLoading && <span className="pos-retry-note">Checking return history…</span>}
             <button type="button" className="pos-button primary" onClick={openReceiptFromHistory}><Printer size={17} /> Print invoice</button>
           </div>
         </section>
