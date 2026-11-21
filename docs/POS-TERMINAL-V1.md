@@ -43,7 +43,7 @@ Stock receipts are handled separately through the authenticated inventory receip
 This terminal does not claim to implement the complete retail operations suite. These features remain separate work:
 
 - Multi-register assignment policies, shift reopening, supervisor override thresholds and cross-register cash transfers. Basic register, shift, opening-float, cash-in/out and closing-reconciliation workflows are implemented.
-- Returns, exchanges, refunds, voids and credit notes.
+- Exchanges, sale voids, credit notes and automated provider refund execution. Manager/admin customer returns with audited refund records and stock disposition are now implemented; provider refunds still require external completion and reference capture.
 - GST/tax calculation and accountant-approved invoice numbering/wording.
 - Supplier purchasing, goods receipt, purchase returns and stock counts.
 - Full permission-code matrix, per-register restrictions and approval workflows. The first ADMIN/MANAGER/CASHIER role layer is now available; see the staff management notes below.
@@ -86,3 +86,12 @@ The backend migration `007-create-register-shifts-cash.sql` creates a MAIN regis
 The POS page shows register selection, opening float, expected drawer cash, cash-in/out and shift closing. A cash variance requires an explanation. Cashier access is limited to their own shift; managers and administrators can review and close shifts. The checkout, cash tender ledger and stock deduction commit in one backend transaction.
 
 Migration 007 is manual and has not been executed against any live/client database.
+
+
+## Customer returns
+
+Managers and administrators can open a completed sale from Sales history and process a partial or full return. The POS calculates the refund from the original sale line snapshot and allocates the original sale discount proportionally. Previously returned quantities are shown as remaining quantities; the backend enforces the same limit under a sale-row lock.
+
+Each returned line must be classified as RESTOCK, DAMAGED or DISCARD. Only RESTOCK adds inventory, and it writes a dedicated append-only stock movement. DAMAGED and DISCARD require a reason and do not increase stock. Cash refunds reduce the active shift's expected drawer cash. UPI/card refunds require a provider transaction reference; the POS records that reference but does not itself execute the provider refund.
+
+Backend migration: `008-create-customer-returns.sql`. It is manual and has not been run against any live/client database.
