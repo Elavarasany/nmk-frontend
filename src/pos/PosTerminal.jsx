@@ -257,15 +257,18 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [quantity, setQuantity] = useState("1");
   const [reason, setReason] = useState("Supplier stock receipt");
   const [receiptSaving, setReceiptSaving] = useState(false);
-  const [receiptRetry, setReceiptRetry] = useState(false);
+  const receiptPayload = useRef(readPendingOperation("nmk.pos.pending-inventory-receipt.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.locationId && payload.variantId && payload.quantity)));
+  const [receiptRetry, setReceiptRetry] = useState(Boolean(receiptPayload.current));
   const [receiptPassword, setReceiptPassword] = useState("");
-  const receiptPayload = useRef(null);
   const [adjustmentDelta, setAdjustmentDelta] = useState("0");
   const [adjustmentReason, setAdjustmentReason] = useState("Physical stock count correction");
   const [adjustmentSaving, setAdjustmentSaving] = useState(false);
-  const [adjustmentRetry, setAdjustmentRetry] = useState(false);
+  const adjustmentPayload = useRef(readPendingOperation("nmk.pos.pending-inventory-adjustment.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.locationId && payload.variantId
+      && Number.isInteger(payload.quantityDelta) && payload.quantityDelta !== 0)));
+  const [adjustmentRetry, setAdjustmentRetry] = useState(Boolean(adjustmentPayload.current));
   const [adjustmentPassword, setAdjustmentPassword] = useState("");
-  const adjustmentPayload = useRef(null);
   const [stockCount, setStockCount] = useState(null);
   const [stockCountLoading, setStockCountLoading] = useState(false);
   const [stockCountSaving, setStockCountSaving] = useState(false);
@@ -799,13 +802,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const receiveStock = async (event) => {
     event.preventDefault();
     onError("");
-    if (stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
-    if (!locationId) { onError("Choose an active inventory location."); return; }
-    if (!selectedVariantId) { onError("Create or select an active variant first."); return; }
-    if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0) {
+    if (!receiptPayload.current && stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
+    if (!receiptPayload.current && !locationId) { onError("Choose an active inventory location."); return; }
+    if (!receiptPayload.current && !selectedVariantId) { onError("Create or select an active variant first."); return; }
+    if (!receiptPayload.current && (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0)) {
       onError("Stock quantity must be a positive whole number."); return;
     }
-    if (!reason.trim()) { onError("A stock receipt reason is required."); return; }
+    if (!receiptPayload.current && !reason.trim()) { onError("A stock receipt reason is required."); return; }
 
     if (!receiptPayload.current) {
       receiptPayload.current = {
@@ -815,6 +818,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         idempotencyKey: newIdempotencyKey(),
         reason: reason.trim(),
       };
+      savePendingOperation("nmk.pos.pending-inventory-receipt.v1", receiptPayload.current);
     }
     setReceiptSaving(true);
     try {
@@ -823,6 +827,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(receiptPayload.current)
       });
       receiptPayload.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-inventory-receipt.v1");
       setReceiptRetry(false);
       setReceiptPassword("");
       setQuantity("1");
@@ -834,6 +839,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         onError(`${err.message} Retry this exact receipt to safely reuse its idempotency key.`);
       } else {
         receiptPayload.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-inventory-receipt.v1");
         setReceiptRetry(false);
         onError(err.message);
       }
@@ -843,15 +849,15 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const adjustStock = async (event) => {
     event.preventDefault();
     onError("");
-    if (stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
-    if (!locationId) { onError("Choose an active inventory location."); return; }
-    if (!selectedVariantId) { onError("Choose an active variant before adjusting stock."); return; }
     const delta = Number(adjustmentDelta);
-    if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 1000000) {
+    if (!adjustmentPayload.current && stockCountActive) { onError("Inventory is frozen while a physical stock count is active."); return; }
+    if (!adjustmentPayload.current && !locationId) { onError("Choose an active inventory location."); return; }
+    if (!adjustmentPayload.current && !selectedVariantId) { onError("Choose an active variant before adjusting stock."); return; }
+    if (!adjustmentPayload.current && (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 1000000)) {
       onError("Adjustment must be a non-zero whole number between -1,000,000 and 1,000,000.");
       return;
     }
-    if (!adjustmentReason.trim()) { onError("A stock adjustment reason is required."); return; }
+    if (!adjustmentPayload.current && !adjustmentReason.trim()) { onError("A stock adjustment reason is required."); return; }
 
     if (!adjustmentPayload.current) {
       adjustmentPayload.current = {
@@ -861,6 +867,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         idempotencyKey: newIdempotencyKey(),
         reason: adjustmentReason.trim(),
       };
+      savePendingOperation("nmk.pos.pending-inventory-adjustment.v1", adjustmentPayload.current);
     }
     setAdjustmentSaving(true);
     try {
@@ -869,6 +876,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken }, body: JSON.stringify(adjustmentPayload.current)
       });
       adjustmentPayload.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-inventory-adjustment.v1");
       setAdjustmentRetry(false);
       setAdjustmentPassword("");
       setAdjustmentDelta("0");
@@ -880,6 +888,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         onError(`${err.message} Retry the exact same adjustment to safely reuse its idempotency key.`);
       } else {
         adjustmentPayload.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-inventory-adjustment.v1");
         setAdjustmentRetry(false);
         onError(err.message);
       }
