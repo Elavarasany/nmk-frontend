@@ -1091,6 +1091,8 @@ export default function PosTerminal() {
   });
   const [salesReport, setSalesReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [inventoryReport, setInventoryReport] = useState(null);
+  const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
@@ -1326,6 +1328,17 @@ export default function PosTerminal() {
     finally { setReportLoading(false); }
   }, [locationId, reportFrom, reportTo]);
 
+  const loadInventoryReport = useCallback(async () => {
+    if (!locationId) return;
+    setInventoryReportLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(`/admin/pos/reports/inventory?locationId=${encodeURIComponent(locationId)}`);
+      setInventoryReport(data);
+    } catch (err) { setError(err.message); }
+    finally { setInventoryReportLoading(false); }
+  }, [locationId]);
+
   const openVoidDialog = (sale) => {
     if (selectedSaleReturns === null) {
       setError("Return history could not be verified. Close and reopen this transaction before attempting a full void.");
@@ -1415,6 +1428,7 @@ export default function PosTerminal() {
   useEffect(() => { if (locationId) loadCatalog(); }, [locationId, loadCatalog]);
   useEffect(() => { if (activeTab === "history") loadHistory(0); }, [activeTab, loadHistory]);
   useEffect(() => { if (activeTab === "reports") loadSalesReport(); }, [activeTab, loadSalesReport]);
+  useEffect(() => { if (activeTab === "inventory-report") loadInventoryReport(); }, [activeTab, loadInventoryReport]);
 
   const categories = useMemo(() => ["All", ...new Set(catalog.map((p) => p.category).filter(Boolean))], [catalog]);
   const filteredProducts = useMemo(() => {
@@ -1973,6 +1987,7 @@ export default function PosTerminal() {
             {canManageInventory && <button type="button" className={`pos-tab-button ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}><Package size={17} /> Inventory</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><BarChart3 size={17} /> Reports</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "inventory-report" ? "active" : ""}`} onClick={() => setActiveTab("inventory-report")}><ClipboardCheck size={17} /> Stock report</button>}
           </div>
         </div>
 
@@ -2152,6 +2167,38 @@ export default function PosTerminal() {
           </div>
         ) : activeTab === "inventory" ? (
           <InventoryPanel locationId={locationId} catalog={catalog} onRefreshCatalog={loadCatalog} onNotice={setNotice} onError={setError} />
+        ) : activeTab === "inventory-report" ? (
+          <section className="pos-history-panel pos-report-panel">
+            <div className="pos-panel-heading">
+              <div><h2>Inventory on-hand report</h2><p>Quantity-only snapshot for the selected location. Cost valuation and profit are intentionally excluded until unit-cost data is verified.</p></div>
+              <button type="button" className="pos-button secondary compact" onClick={loadInventoryReport} disabled={inventoryReportLoading}>
+                <RefreshCw size={15} className={inventoryReportLoading ? "pos-spin" : ""} /> Refresh
+              </button>
+            </div>
+            {inventoryReportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading inventory balances…</span></div>
+              : !inventoryReport ? <div className="pos-empty-state"><Package /><strong>No inventory report loaded</strong><span>Refresh to load the selected location's stock balances.</span></div>
+              : <>
+                <div className="pos-report-summary pos-inventory-report-summary">
+                  <article><span>Variants tracked</span><strong>{inventoryReport.variantCount}</strong></article>
+                  <article><span>On hand</span><strong>{inventoryReport.onHandQuantity}</strong></article>
+                  <article><span>Reserved</span><strong>{inventoryReport.reservedQuantity}</strong></article>
+                  <article><span>Available</span><strong>{inventoryReport.availableQuantity}</strong></article>
+                  <article><span>Low stock variants</span><strong>{inventoryReport.lowStockCount}</strong></article>
+                </div>
+                <p className="pos-retry-note">Showing variants with a stock balance at {inventoryReport.locationName} ({inventoryReport.locationCode}). Available quantity is on-hand minus reserved.</p>
+                <section className="pos-report-table-section"><h3>Stock by product variant</h3>
+                  <div className="pos-history-table-wrap"><table className="pos-history-table">
+                    <thead><tr><th>Product</th><th>Variant / SKU</th><th>On hand</th><th>Reserved</th><th>Available</th><th>Reorder level</th><th>Status</th></tr></thead>
+                    <tbody>{(inventoryReport.items || []).map((row) => <tr key={row.variantId}>
+                      <td><strong>{row.productName}</strong></td>
+                      <td>{row.variantName || "—"}<small>{row.sku}</small></td>
+                      <td>{row.onHandQuantity}</td><td>{row.reservedQuantity}</td><td><strong>{row.availableQuantity}</strong></td><td>{row.reorderLevel}</td>
+                      <td><span className={row.lowStock ? "pos-stock-status low" : "pos-stock-status healthy"}>{row.lowStock ? "Low stock" : "In range"}</span></td>
+                    </tr>)}</tbody>
+                  </table></div>
+                </section>
+              </>}
+          </section>
         ) : activeTab === "reports" ? (
           <section className="pos-history-panel pos-report-panel">
             <div className="pos-panel-heading">
