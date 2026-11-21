@@ -48,3 +48,14 @@ These require approved shop/accounting policies and additive schema migrations. 
 ## Deployment gate
 
 No live/client database migration is performed by the frontend terminal. Before production POS use, the backend's manual variant/inventory/POS migrations must be reviewed, tested on a restorable staging copy, and explicitly approved for the client database. Set `VITE_API_BASE_URL` consistently for the storefront, admin login/dashboard and POS terminal. The default is `http://localhost:8080/api`; for the isolated local E2E backend use `http://localhost:8082/api`. Configure the production API URL and backend CORS allowlist separately; do not deploy the local development API URL.
+
+
+## Stock adjustment capability (operations branch)
+
+The Inventory tab now also supports an authenticated stock adjustment for verified physical count differences, damage/write-offs and documented discrepancies.
+
+- Positive quantity change adds stock; negative quantity change removes stock.
+- A non-zero adjustment reason and a fresh idempotency key are required.
+- The exact same request must be retried after an uncertain network response.
+- The backend prevents adjustments from reducing on-hand below stock reserved for online orders and writes an append-only stock movement.
+- Supplier deliveries must still use stock receipt. This adjustment form is not a full stock-count session with frozen snapshots or approval workflow.
