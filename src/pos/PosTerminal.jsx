@@ -2304,6 +2304,10 @@ export default function PosTerminal() {
           && (Number(exchangeCollectionTendered) || 0) < exchangeCollectionDue) {
         setError("Cash received must cover the amount due for the replacement."); return;
       }
+      if (exchangeCollectionDue > 0 && exchangeCollectionMethod !== "CASH"
+          && !exchangeCollectionReference.trim()) {
+        setError("Enter the UPI/card transaction reference for the replacement collection."); return;
+      }
     }
     if (!exchangePendingPayload) {
       exchangePendingKey.current = exchangePendingKey.current || newIdempotencyKey();
@@ -3107,9 +3111,9 @@ export default function PosTerminal() {
               {exchangeCollectionMethod === "CASH" ? <label>Cash received
                 <input type="number" min={amount(exchangeCollectionDue)} step="0.01" value={exchangeCollectionTendered}
                   onChange={(event) => setExchangeCollectionTendered(event.target.value)} disabled={exchangeSaving || exchangeRetryPending} />
-              </label> : <label>Payment reference (optional)
+              </label> : <label>Payment reference
                 <input value={exchangeCollectionReference} onChange={(event) => setExchangeCollectionReference(event.target.value)}
-                  maxLength={150} placeholder="UPI/card transaction reference" disabled={exchangeSaving || exchangeRetryPending} />
+                  maxLength={150} placeholder="UPI/card transaction reference" required disabled={exchangeSaving || exchangeRetryPending} />
               </label>}
               {exchangeCollectionMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the UPI/card collection externally first. This POS records the reference; it does not verify provider settlement.</p>}
             </div>}
