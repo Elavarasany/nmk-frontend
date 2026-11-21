@@ -2024,24 +2024,29 @@ export default function PosTerminal() {
 
   const submitExchange = async () => {
     if (!returnSale) return;
-    if (!shift?.id || shift.status !== "OPEN") { setError("Open an authorized shift before processing an exchange."); return; }
-    if (!exchangeReason.trim()) { setError("An exchange reason is required."); return; }
     const selectedItems = (returnSale.items || []).filter((item) => Number(returnQuantities[item.id] || 0) > 0);
-    if (!selectedItems.length) { setError("Select at least one original sale quantity to exchange."); return; }
-    if (!exchangeItems.length) { setError("Add at least one replacement item."); return; }
-    if (exchangeDiscountValue > exchangeSubtotal) { setError("Replacement discount cannot exceed replacement subtotal."); return; }
-    for (const item of selectedItems) {
-      const disposition = returnDispositions[item.id] || "RESTOCK";
-      if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
-        setError("Explain why each damaged or discarded returned item cannot be restocked."); return;
+    // Once an exchange request may have reached the server, only its saved immutable
+    // payload is authoritative. Do not revalidate against a now-closed shift or
+    // changed catalog/form state; the backend checks idempotency before new work.
+    if (!exchangePendingPayload) {
+      if (!shift?.id || shift.status !== "OPEN") { setError("Open an authorized shift before processing an exchange."); return; }
+      if (!exchangeReason.trim()) { setError("An exchange reason is required."); return; }
+      if (!selectedItems.length) { setError("Select at least one original sale quantity to exchange."); return; }
+      if (!exchangeItems.length) { setError("Add at least one replacement item."); return; }
+      if (exchangeDiscountValue > exchangeSubtotal) { setError("Replacement discount cannot exceed replacement subtotal."); return; }
+      for (const item of selectedItems) {
+        const disposition = returnDispositions[item.id] || "RESTOCK";
+        if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
+          setError("Explain why each damaged or discarded returned item cannot be restocked."); return;
+        }
       }
-    }
-    if (exchangeRefundDue > 0 && exchangeRefundMethod !== "CASH" && !exchangeRefundReference.trim()) {
-      setError("Enter the completed UPI/card refund transaction reference."); return;
-    }
-    if (exchangeCollectionDue > 0 && exchangeCollectionMethod === "CASH"
-        && (Number(exchangeCollectionTendered) || 0) < exchangeCollectionDue) {
-      setError("Cash received must cover the amount due for the replacement."); return;
+      if (exchangeRefundDue > 0 && exchangeRefundMethod !== "CASH" && !exchangeRefundReference.trim()) {
+        setError("Enter the completed UPI/card refund transaction reference."); return;
+      }
+      if (exchangeCollectionDue > 0 && exchangeCollectionMethod === "CASH"
+          && (Number(exchangeCollectionTendered) || 0) < exchangeCollectionDue) {
+        setError("Cash received must cover the amount due for the replacement."); return;
+      }
     }
     if (!exchangePendingPayload) {
       exchangePendingKey.current = exchangePendingKey.current || newIdempotencyKey();
@@ -2131,30 +2136,33 @@ export default function PosTerminal() {
 
   const submitReturn = async () => {
     if (!returnSale) return;
-    if (!shift?.id || shift.status !== "OPEN") {
-      setError("Open your own cashier shift before processing a return.");
-      return;
-    }
-    if (!returnReason.trim()) {
-      setError("A return reason is required.");
-      return;
-    }
-
     const selectedItems = (returnSale.items || []).filter((item) => Number(returnQuantities[item.id] || 0) > 0);
-    if (!selectedItems.length) {
-      setError("Select at least one quantity to return.");
-      return;
-    }
-    for (const item of selectedItems) {
-      const disposition = returnDispositions[item.id] || "RESTOCK";
-      if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
-        setError("Explain why each damaged or discarded item cannot be restocked.");
+    // A retry must use the exact saved request even if the original shift has closed
+    // or the editable form/catalog has since changed.
+    if (!returnPendingPayload) {
+      if (!shift?.id || shift.status !== "OPEN") {
+        setError("Open your own cashier shift before processing a return.");
         return;
       }
-    }
-    if (returnQuote > 0 && returnPaymentMethod !== "CASH" && !returnPaymentReference.trim()) {
-      setError("Enter the completed UPI/card refund transaction reference.");
-      return;
+      if (!returnReason.trim()) {
+        setError("A return reason is required.");
+        return;
+      }
+      if (!selectedItems.length) {
+        setError("Select at least one quantity to return.");
+        return;
+      }
+      for (const item of selectedItems) {
+        const disposition = returnDispositions[item.id] || "RESTOCK";
+        if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
+          setError("Explain why each damaged or discarded item cannot be restocked.");
+          return;
+        }
+      }
+      if (returnQuote > 0 && returnPaymentMethod !== "CASH" && !returnPaymentReference.trim()) {
+        setError("Enter the completed UPI/card refund transaction reference.");
+        return;
+      }
     }
 
     if (!returnPendingPayload) {
