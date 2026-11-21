@@ -146,6 +146,13 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [movementLoading, setMovementLoading] = useState(false);
   const [movementVariantId, setMovementVariantId] = useState("");
   const stockCountActive = stockCount && ["COUNTING", "READY_FOR_REVIEW"].includes(stockCount.status);
+  const currentStaffUsername = sessionStorage.getItem("adminUsername") || "";
+  const currentStaffPreparedCount = Boolean(stockCount && currentStaffUsername && (
+    [stockCount.startedByUsername, stockCount.submittedByUsername]
+      .some((username) => username && username.toLowerCase() === currentStaffUsername.toLowerCase())
+    || (stockCount.lines || []).some((line) => line.countedByUsername
+      && line.countedByUsername.toLowerCase() === currentStaffUsername.toLowerCase())
+  ));
 
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -749,9 +756,16 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               </div>
               <div className="pos-stock-count-actions">
                 {stockCount.status === "COUNTING" && <button type="button" className="pos-button primary" onClick={submitStockCount} disabled={stockCountSaving || stockCount.countedLineCount !== stockCount.lineCount}>Submit for review</button>}
-                {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving}>Post stock variances</button>}
+                {stockCount.status === "READY_FOR_REVIEW" && <button type="button" className="pos-button primary" onClick={postStockCount} disabled={stockCountSaving || currentStaffPreparedCount}>Post stock variances</button>}
                 <button type="button" className="pos-button secondary" onClick={cancelStockCount} disabled={stockCountSaving}>Cancel count</button>
               </div>
+              {stockCount.status === "READY_FOR_REVIEW" && (
+                <p className="pos-retry-note">
+                  {currentStaffPreparedCount
+                    ? "You started, counted or submitted this session. A different manager or administrator must review and post it."
+                    : `Submitted by ${stockCount.submittedByUsername || "staff"}. You can independently review and post this count.`}
+                </p>
+              )}
               <p className="pos-retry-note">Stock receiving, adjustments, online reservations and POS sales are blocked until this count is posted or cancelled.</p>
             </>
           )}
