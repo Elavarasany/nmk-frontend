@@ -1608,7 +1608,10 @@ export default function PosTerminal() {
   };
 
   const submitVoid = async () => {
-    if (!selectedHistorySale || !shift?.id || !voidReason.trim()) {
+    if (!selectedHistorySale) return;
+    // For an uncertain response, retry the original immutable payload. The backend
+    // replays a committed void by idempotency key before checking the shift state.
+    if (!voidPayload && (!shift?.id || !voidReason.trim())) {
       setVoidError("An open manager shift and a void reason are required.");
       return;
     }
