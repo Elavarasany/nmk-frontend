@@ -30,7 +30,7 @@ const FaceAnalysis = lazy(() => import("./FaceAnalysis"));
    CONSTANTS
 ========================= */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || (import.meta.env.DEV ? "http://localhost:8080/api" : "");
 const API_URL = `${API_BASE}/products`;
 const CART_KEY = "nmk-cart";
 const WISHLIST_KEY = "nmk-wishlist";
