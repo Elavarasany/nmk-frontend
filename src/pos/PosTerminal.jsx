@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Search, RefreshCw, Plus, Minus, Trash2, Receipt,
-  History, ShoppingCart, Store, Printer, X, CheckCircle2,
+  History, ShoppingCart, Store, Printer, X, CheckCircle2, Clock3,
   AlertCircle, UserRound, CreditCard,
   ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck, Truck, BarChart3
 } from "lucide-react";
