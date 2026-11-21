@@ -12,7 +12,7 @@ The cashier terminal is available at `/admin/pos` after an admin signs in.
 - Select the exact sellable variant and add it to the bill.
 - See current location stock and prevent adding more than the displayed available quantity.
 - Capture optional walk-in customer name and phone.
-- Apply a direct rupee discount.
+- Apply a direct rupee discount (ADMIN/MANAGER only; CASHIER discount requests are rejected by the backend).
 - Accept cash, UPI or card, including split tender across up to three methods.
 - Calculate cash change.
 - Submit the sale through the authenticated POS checkout API.
