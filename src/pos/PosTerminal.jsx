@@ -608,6 +608,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const selectedProduct = products.find((product) => String(product.id) === String(selectedProductId));
   const stockRows = catalog.find((product) => String(product.productId) === String(selectedProductId))?.variants || [];
+  const procurementVariants = catalog.flatMap((product) => (product.variants || []).map((variant) => ({
+    ...variant, productName: product.name,
+  })));
 
   return (
     <section className="pos-inventory-workspace">
@@ -653,6 +656,77 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <p className="pos-retry-note">Stock receiving, adjustments, online reservations and POS sales are blocked until this count is posted or cancelled.</p>
             </>
           )}
+      </section>
+
+      <section className="pos-inventory-card pos-procurement-card">
+        <div className="pos-inventory-card-heading"><Truck size={18} /><div><h3>Supplier procurement</h3><p>Create purchase orders, receive partial deliveries and return goods to suppliers with stock ledger references.</p></div>
+          <button type="button" className="pos-button secondary compact" onClick={loadProcurement} disabled={procurementLoading}><RefreshCw size={14} /> Refresh</button>
+        </div>
+        <div className="pos-procurement-grid">
+          <form className="pos-procurement-form" onSubmit={createSupplier}>
+            <h4>Add supplier</h4>
+            <label>Supplier name<input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} maxLength={200} required placeholder="Supplier business name" /></label>
+            <div className="pos-inventory-fields">
+              <label>Contact person<input value={supplierContact} onChange={(event) => setSupplierContact(event.target.value)} maxLength={120} placeholder="Optional" /></label>
+              <label>Phone<input value={supplierPhone} onChange={(event) => setSupplierPhone(event.target.value)} maxLength={30} placeholder="Optional" /></label>
+              <label>Email<input type="email" value={supplierEmail} onChange={(event) => setSupplierEmail(event.target.value)} maxLength={160} placeholder="Optional" /></label>
+              <label>Address<input value={supplierAddress} onChange={(event) => setSupplierAddress(event.target.value)} maxLength={500} placeholder="Optional" /></label>
+            </div>
+            <button type="submit" className="pos-button secondary" disabled={procurementSaving}>{procurementSaving ? "Saving…" : "Save supplier"}</button>
+          </form>
+
+          <form className="pos-procurement-form" onSubmit={createPurchaseOrder}>
+            <h4>Create purchase order</h4>
+            <label>Supplier<select value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)} required>
+              <option value="">Choose active supplier</option>
+              {suppliers.filter((supplier) => supplier.active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select></label>
+            <label>Order notes<input value={purchaseOrderNotes} onChange={(event) => setPurchaseOrderNotes(event.target.value)} maxLength={500} placeholder="Optional delivery or reference notes" /></label>
+            <div className="pos-po-lines">
+              {purchaseOrderItems.map((item, index) => <div className="pos-po-line" key={index}>
+                <label>Variant<select value={item.variantId} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, variantId: event.target.value } : line))} required>
+                  <option value="">Select SKU</option>
+                  {procurementVariants.map((variant) => <option key={variant.variantId} value={variant.variantId}>{variant.productName} · {variant.variantName} · {variant.sku}</option>)}
+                </select></label>
+                <label>Qty<input type="number" min="1" step="1" value={item.orderedQuantity} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, orderedQuantity: event.target.value } : line))} required /></label>
+                <label>Unit cost (₹)<input type="number" min="0.01" step="0.01" value={item.unitCost} onChange={(event) => setPurchaseOrderItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, unitCost: event.target.value } : line))} required /></label>
+                <button type="button" className="pos-remove-button" onClick={() => setPurchaseOrderItems((current) => current.filter((_, lineIndex) => lineIndex !== index))} disabled={purchaseOrderItems.length <= 1} aria-label="Remove purchase order line"><X size={15} /></button>
+              </div>)}
+            </div>
+            <div className="pos-procurement-form-actions">
+              <button type="button" className="pos-button secondary compact" onClick={() => setPurchaseOrderItems((current) => [...current, { variantId: "", orderedQuantity: "1", unitCost: "" }])}>Add line</button>
+              <button type="submit" className="pos-button primary" disabled={procurementSaving || !selectedSupplierId || !locationId}>{procurementSaving ? "Creating…" : "Create draft PO"}</button>
+            </div>
+          </form>
+        </div>
+
+        <div className="pos-procurement-orders">
+          <div className="pos-panel-heading"><div><h4>Purchase orders</h4><p>Orders for the selected store location.</p></div></div>
+          {procurementLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading purchase orders…</span></div>
+            : purchaseOrders.filter((order) => String(order.locationId) === String(locationId)).length === 0
+              ? <div className="pos-empty-state"><Truck /><strong>No purchase orders yet</strong><span>Create a supplier and draft order above.</span></div>
+              : purchaseOrders.filter((order) => String(order.locationId) === String(locationId)).map((order) => (
+                <article className="pos-po-card" key={order.id}>
+                  <div className="pos-po-card-heading">
+                    <div><strong>{order.orderNumber}</strong><span>{order.supplierName} · {order.locationName}</span></div>
+                    <div><span className={`pos-po-status ${order.status.toLowerCase().replaceAll("_", "-")}`}>{order.status.replaceAll("_", " ")}</span><strong>{money(order.subtotal)}</strong></div>
+                  </div>
+                  <details className="pos-po-details">
+                    <summary>{order.items.length} SKU lines · View quantities</summary>
+                    <div className="pos-po-detail-lines">{order.items.map((item) => <div key={item.id}>
+                      <span><strong>{item.productName}</strong><small>{item.variantName} · {item.sku}</small></span>
+                      <span>Ordered {item.orderedQuantity}</span><span>Received {item.receivedQuantity}</span><span>Returned {item.returnedQuantity}</span>
+                    </div>)}</div>
+                  </details>
+                  <div className="pos-po-actions">
+                    {order.status === "DRAFT" && <button type="button" className="pos-button secondary compact" onClick={() => submitPurchaseOrder(order)} disabled={procurementSaving}>Submit order</button>}
+                    {["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status) && <button type="button" className="pos-button primary compact" onClick={() => openGoodsReceipt(order)} disabled={stockCountActive}>Receive goods</button>}
+                    {["PARTIALLY_RECEIVED", "RECEIVED"].includes(order.status) && order.items.some((item) => item.receivedQuantity > item.returnedQuantity) &&
+                      <button type="button" className="pos-button secondary compact" onClick={() => openSupplierReturn(order)} disabled={stockCountActive}>Return to supplier</button>}
+                  </div>
+                </article>
+              ))}
+        </div>
       </section>
 
       <div className="pos-inventory-grid">
@@ -733,6 +807,53 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           </form>
         </section>
       </div>
+
+      {receivingOrder && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !goodsReceiptSaving && !goodsReceiptRetry) setReceivingOrder(null);
+      }}>
+        <section className="pos-procurement-modal" role="dialog" aria-modal="true" aria-labelledby="goods-receipt-title">
+          <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">GOODS RECEIPT</span><h2 id="goods-receipt-title">{receivingOrder.orderNumber}</h2></div>
+            <button type="button" className="pos-icon-button" onClick={() => setReceivingOrder(null)} disabled={goodsReceiptSaving || goodsReceiptRetry} aria-label="Close goods receipt"><X /></button></div>
+          <p>Enter quantities physically received. The backend rejects quantities above the outstanding order balance.</p>
+          {receivingOrder.items.filter((item) => item.outstandingQuantity > 0).map((item) => <label className="pos-procurement-quantity-row" key={item.id}>
+            <span><strong>{item.productName}</strong><small>{item.variantName} · {item.sku} · Outstanding {item.outstandingQuantity}</small></span>
+            <input type="number" min="0" max={item.outstandingQuantity} step="1" value={goodsReceiptQuantities[item.id] || ""}
+              onChange={(event) => setGoodsReceiptQuantities((current) => ({ ...current, [item.id]: Math.min(item.outstandingQuantity, Math.max(0, Number(event.target.value) || 0)) }))}
+              disabled={goodsReceiptSaving || goodsReceiptRetry} />
+          </label>)}
+          <label className="pos-return-field">Receipt reason<input value={goodsReceiptReason} onChange={(event) => setGoodsReceiptReason(event.target.value)} maxLength={500} disabled={goodsReceiptSaving || goodsReceiptRetry} /></label>
+          {goodsReceiptRetry && <p className="pos-retry-note">Retry the exact same receipt. Its original idempotency key is retained.</p>}
+          <div className="pos-modal-actions">
+            <button type="button" className="pos-button secondary" onClick={() => setReceivingOrder(null)} disabled={goodsReceiptSaving || goodsReceiptRetry}>Cancel</button>
+            <button type="button" className="pos-button primary" onClick={receivePurchaseOrderGoods} disabled={goodsReceiptSaving || stockCountActive}>{goodsReceiptSaving ? "Receiving…" : goodsReceiptRetry ? "Retry same receipt" : "Confirm goods receipt"}</button>
+          </div>
+        </section>
+      </div>}
+
+      {supplierReturnOrder && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !supplierReturnSaving && !supplierReturnRetry) setSupplierReturnOrder(null);
+      }}>
+        <section className="pos-procurement-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-return-title">
+          <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">SUPPLIER RETURN</span><h2 id="supplier-return-title">{supplierReturnOrder.orderNumber}</h2></div>
+            <button type="button" className="pos-icon-button" onClick={() => setSupplierReturnOrder(null)} disabled={supplierReturnSaving || supplierReturnRetry} aria-label="Close supplier return"><X /></button></div>
+          <p>Return received goods to the supplier. The backend prevents returning more than the received quantity or removing reserved stock.</p>
+          {supplierReturnOrder.items.filter((item) => item.receivedQuantity > item.returnedQuantity).map((item) => {
+            const returnable = item.receivedQuantity - item.returnedQuantity;
+            return <label className="pos-procurement-quantity-row" key={item.id}>
+              <span><strong>{item.productName}</strong><small>{item.variantName} · {item.sku} · Returnable {returnable}</small></span>
+              <input type="number" min="0" max={returnable} step="1" value={supplierReturnQuantities[item.id] || ""}
+                onChange={(event) => setSupplierReturnQuantities((current) => ({ ...current, [item.id]: Math.min(returnable, Math.max(0, Number(event.target.value) || 0)) }))}
+                disabled={supplierReturnSaving || supplierReturnRetry} />
+            </label>;
+          })}
+          <label className="pos-return-field">Supplier return reason<input value={supplierReturnReason} onChange={(event) => setSupplierReturnReason(event.target.value)} maxLength={500} disabled={supplierReturnSaving || supplierReturnRetry} /></label>
+          {supplierReturnRetry && <p className="pos-retry-note">Retry the exact same supplier return. Its original idempotency key is retained.</p>}
+          <div className="pos-modal-actions">
+            <button type="button" className="pos-button secondary" onClick={() => setSupplierReturnOrder(null)} disabled={supplierReturnSaving || supplierReturnRetry}>Cancel</button>
+            <button type="button" className="pos-button primary" onClick={returnPurchaseOrderGoods} disabled={supplierReturnSaving || stockCountActive}>{supplierReturnSaving ? "Recording…" : supplierReturnRetry ? "Retry same return" : "Confirm supplier return"}</button>
+          </div>
+        </section>
+      </div>}
 
       <section className="pos-inventory-card pos-stock-card">
         <div className="pos-inventory-card-heading"><Package size={18} /><div><h3>Current stock by variant</h3><p>{selectedProduct?.name || "Select a product"} · {stockRows.length} active variants at this location</p></div></div>
