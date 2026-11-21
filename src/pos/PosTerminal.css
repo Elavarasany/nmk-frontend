@@ -697,6 +697,21 @@
 @media (max-width: 760px) {
   .pos-exchange-history-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.pos-inventory-report-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.pos-stock-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pos-stock-status.low { background: #fff4e6; color: #8a5a18; }
+.pos-stock-status.healthy { background: #edf7f0; color: #276344; }
+@media (max-width: 760px) {
+  .pos-inventory-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .pos-stock-count-card { margin-bottom: 18px; }
 .pos-stock-count-start {
   display: grid;
