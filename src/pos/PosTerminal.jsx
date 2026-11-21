@@ -2730,11 +2730,11 @@ export default function PosTerminal() {
                   <div className="pos-payment-inputs">
                     <label>Amount<input type="number" min="0" step="0.01" value={payment.amount} disabled={retryPending} onChange={(e) => updatePayment(index, "amount", e.target.value)} /></label>
                     {payment.paymentMethod === "CASH" ? <label>Cash received<input type="number" min="0" step="0.01" value={payment.tenderedAmount} disabled={retryPending} onChange={(e) => updatePayment(index, "tenderedAmount", e.target.value)} /></label>
-                      : <label>Reference (optional)<input value={payment.transactionReference} disabled={retryPending} onChange={(e) => updatePayment(index, "transactionReference", e.target.value)} placeholder="UPI / card reference" maxLength={150} /></label>}
+                      : <label>UPI / card transaction reference<input value={payment.transactionReference} disabled={retryPending} required onChange={(e) => updatePayment(index, "transactionReference", e.target.value)} placeholder="Enter UTR or card terminal reference" maxLength={150} /></label>}
                   </div>
                 </div>)}
                 {(payments.some((payment) => payment.paymentMethod === "UPI" || payment.paymentMethod === "CARD")) && (
-                  <p className="pos-retry-note">For UPI or card, collect payment using the shop's QR code or card terminal and verify it succeeded before completing this sale. This POS records the tender and reference; it does not initiate or verify the provider payment.</p>
+                  <p className="pos-retry-note">For UPI or card, collect payment using the shop's QR code or card terminal, verify it succeeded, and enter its UTR / terminal reference. This POS records the tender; it does not initiate or independently verify provider settlement.</p>
                 )}
                 {payments.length < 3 && <button type="button" className="pos-add-split" onClick={addSplitPayment} disabled={retryPending}><Plus size={15} /> Add split payment</button>}
                 <div className={Math.abs(paymentTotal - grandTotal) < 0.001 ? "pos-payment-match" : "pos-payment-mismatch"}><span>Payment total</span><strong>{money(paymentTotal)}</strong></div>
