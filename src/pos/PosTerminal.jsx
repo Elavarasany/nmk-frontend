@@ -37,6 +37,29 @@ function readPendingCheckout() {
   }
 }
 
+function readPendingOperation(key, valid) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const record = JSON.parse(raw);
+    const username = sessionStorage.getItem("adminUsername") || "";
+    if (!username || record?.username !== username || !valid(record.payload)) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return record.payload;
+  } catch {
+    sessionStorage.removeItem(key);
+    return null;
+  }
+}
+function savePendingOperation(key, payload) {
+  sessionStorage.setItem(key, JSON.stringify({
+    username: sessionStorage.getItem("adminUsername") || "",
+    payload,
+  }));
+}
+
 async function authorizePosAction(action, password) {
   if (!password?.trim()) throw new Error("Enter your staff password to authorize this action.");
   const result = await apiRequest("/admin/auth/authorize-action", {
@@ -1306,8 +1329,8 @@ export default function PosTerminal() {
   const [exchangePendingPayload, setExchangePendingPayload] = useState(null);
   const exchangePendingKey = useRef(null);
   const pendingKey = useRef(pendingPayload?.idempotencyKey || null);
-  const openShiftPayload = useRef(null);
-  const cashMovementPayload = useRef(null);
+  const openShiftPayload = useRef(readPendingOperation("nmk.pos.pending-open-shift.v1", (p) => p?.idempotencyKey && p?.registerId));
+  const cashMovementPayload = useRef(readPendingOperation("nmk.pos.pending-cash-movement.v1", (p) => p?.idempotencyKey && p?.shiftId && p?.amount > 0));
   const searchRef = useRef(null);
 
   const loadLocations = useCallback(async () => {
@@ -1374,6 +1397,7 @@ export default function PosTerminal() {
         openingFloat: Number(amount(float)),
         idempotencyKey: newIdempotencyKey(),
       };
+      savePendingOperation("nmk.pos.pending-open-shift.v1", openShiftPayload.current);
     }
     setShiftSaving(true);
     setError("");
@@ -1383,12 +1407,16 @@ export default function PosTerminal() {
         body: JSON.stringify(openShiftPayload.current),
       });
       openShiftPayload.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-open-shift.v1");
       setShift(opened);
       setClosingCashCount(amount(opened.expectedCash));
       setNotice("Cashier shift opened.");
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
-      if (!uncertain) openShiftPayload.current = null;
+      if (!uncertain) {
+        openShiftPayload.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-open-shift.v1");
+      }
       setError(`${err.message}${uncertain ? " Retry the exact same shift-opening request; its idempotency key is retained." : ""}`);
       if (uncertain) await loadCurrentShift();
     } finally {
@@ -1436,6 +1464,7 @@ export default function PosTerminal() {
         idempotencyKey: newIdempotencyKey(),
         reason: cashMovementReason.trim(),
       };
+      savePendingOperation("nmk.pos.pending-cash-movement.v1", cashMovementPayload.current);
     }
     const payload = cashMovementPayload.current;
     setShiftSaving(true);
@@ -1451,6 +1480,7 @@ export default function PosTerminal() {
         }),
       });
       cashMovementPayload.current = null;
+      sessionStorage.removeItem("nmk.pos.pending-cash-movement.v1");
       setShift(updated);
       setClosingCashCount(amount(updated.expectedCash));
       setCashMovementAmount("");
@@ -1458,7 +1488,10 @@ export default function PosTerminal() {
       setNotice(payload.movementType === "CASH_IN" ? "Cash added to drawer." : "Cash removed from drawer.");
     } catch (err) {
       const uncertain = !err.status || err.status >= 500 || err.status === 409;
-      if (!uncertain) cashMovementPayload.current = null;
+      if (!uncertain) {
+        cashMovementPayload.current = null;
+        sessionStorage.removeItem("nmk.pos.pending-cash-movement.v1");
+      }
       setError(`${err.message}${uncertain ? " Retry the exact same cash movement; its idempotency key is retained." : ""}`);
       if (uncertain) await loadCurrentShift();
     } finally {
