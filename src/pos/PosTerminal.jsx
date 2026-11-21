@@ -376,6 +376,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
 export default function PosTerminal() {
   const navigate = useNavigate();
+  const staffRole = sessionStorage.getItem("adminRole") || "ADMIN";
+  const canManageInventory = staffRole === "ADMIN" || staffRole === "MANAGER";
+  const canViewHistory = staffRole === "ADMIN" || staffRole === "MANAGER";
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
   const [catalog, setCatalog] = useState([]);
@@ -633,7 +636,7 @@ export default function PosTerminal() {
               {locations.length ? locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>) : <option value="">No location</option>}
             </select>
           </label>
-          <span className="pos-cashier"><UserRound size={16} /> {sessionStorage.getItem("adminUsername") || "Cashier"}</span>
+          <span className="pos-cashier"><UserRound size={16} /> {sessionStorage.getItem("adminUsername") || "Cashier"} · {staffRole}</span>
         </div>
       </header>
 
@@ -642,8 +645,8 @@ export default function PosTerminal() {
           <div><span className="pos-eyebrow">STORE OPERATIONS</span><h1>Sales terminal</h1><p>Scan or search products, build the bill, collect payment and print the invoice.</p></div>
           <div className="pos-heading-actions">
             <button type="button" className={`pos-tab-button ${activeTab === "checkout" ? "active" : ""}`} onClick={() => setActiveTab("checkout")}><ShoppingCart size={17} /> New sale</button>
-            <button type="button" className={`pos-tab-button ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}><Package size={17} /> Inventory</button>
-            <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>
+            {canManageInventory && <button type="button" className={`pos-tab-button ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}><Package size={17} /> Inventory</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>}
           </div>
         </div>
 
