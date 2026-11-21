@@ -1758,6 +1758,7 @@ export default function PosTerminal() {
   }, [catalog, pendingPayload, cart.length]);
 
   useEffect(() => {
+    if (pendingPayload) return;
     if (payments.length === 1) {
       setPayments((current) => current.length === 1 ? [{
         ...current[0],
@@ -2414,7 +2415,7 @@ export default function PosTerminal() {
               </div>
 
               <button type="button" className="pos-complete-button" onClick={completeSale} disabled={checkoutLoading || !cart.length || !locationId || locationStockCountLocked || !shift?.id || shift.status !== "OPEN" || Math.abs(paymentTotal - grandTotal) > 0.001}>
-                {checkoutLoading ? <><RefreshCw className="pos-spin" size={18} /> Processing sale…</> : retryPending ? <><RefreshCw size={18} /> Retry same checkout · {money(grandTotal)}</> : <><Receipt size={18} /> Complete sale · {money(grandTotal)}</>}
+                {checkoutLoading ? <><RefreshCw className="pos-spin" size={18} /> Processing sale…</> : retryPending ? <><RefreshCw size={18} /> Retry same checkout · {money(pendingPayload ? pendingPayload.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) : grandTotal)}</> : <><Receipt size={18} /> Complete sale · {money(grandTotal)}</>}
               </button>
               <p className="pos-secure-note">Prices and stock are verified by the server. Completed sales are recorded with an audit trail.</p>
             </aside>
