@@ -1920,6 +1920,9 @@ export default function PosTerminal() {
                       : <label>Reference (optional)<input value={payment.transactionReference} disabled={retryPending} onChange={(e) => updatePayment(index, "transactionReference", e.target.value)} placeholder="UPI / card reference" maxLength={150} /></label>}
                   </div>
                 </div>)}
+                {(payments.some((payment) => payment.paymentMethod === "UPI" || payment.paymentMethod === "CARD")) && (
+                  <p className="pos-retry-note">For UPI or card, collect payment using the shop's QR code or card terminal and verify it succeeded before completing this sale. This POS records the tender and reference; it does not initiate or verify the provider payment.</p>
+                )}
                 {payments.length < 3 && <button type="button" className="pos-add-split" onClick={addSplitPayment} disabled={retryPending}><Plus size={15} /> Add split payment</button>}
                 <div className={Math.abs(paymentTotal - grandTotal) < 0.001 ? "pos-payment-match" : "pos-payment-mismatch"}><span>Payment total</span><strong>{money(paymentTotal)}</strong></div>
                 {cashChange > 0 && <div className="pos-change-row"><span>Change to return</span><strong>{money(cashChange)}</strong></div>}
