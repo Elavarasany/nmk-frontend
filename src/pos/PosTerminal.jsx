@@ -1701,6 +1701,60 @@ export default function PosTerminal() {
     finally { setHistoryLoading(false); }
   }, [locationId]);
 
+  useEffect(() => {
+    const pending = pendingVoidRecord.current || pendingReturnRecord.current || pendingExchangeRecord.current;
+    if (!pending) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sale = await apiRequest(`/admin/pos/sales/${pending.saleId}`);
+        const [returns, exchanges] = await Promise.all([
+          apiRequest(`/admin/pos/sales/${pending.saleId}/returns`),
+          apiRequest(`/admin/pos/sales/${pending.saleId}/exchange`),
+        ]);
+        if (cancelled) return;
+        setSelectedHistorySale(sale);
+        setSelectedSaleReturns(Array.isArray(returns) ? returns : []);
+        setSelectedSaleExchanges(Array.isArray(exchanges) ? exchanges : []);
+        if (pendingVoidRecord.current) {
+          setVoidDialogOpen(true);
+          setVoidPayload(pendingVoidRecord.current.payload);
+          setVoidRetry(true);
+          setVoidReason(pendingVoidRecord.current.payload.reason || "");
+          setVoidRefunds(pendingVoidRecord.current.payload.refundPayments || []);
+          setVoidError("An unfinished void was recovered. Verify the transaction and enter a manager password to retry the exact original request.");
+        } else if (pendingExchangeRecord.current) {
+          setReturnSale(sale);
+          setSaleReturns(Array.isArray(returns) ? returns : []);
+          setExchangeMode(true);
+          setExchangePendingPayload(pendingExchangeRecord.current.payload);
+          setExchangeRetryPending(true);
+          setExchangeReason(pendingExchangeRecord.current.payload.reason || "");
+          setError("An unfinished exchange was recovered. Review the original sale and enter a manager password to retry the exact original request.");
+        } else if (pendingReturnRecord.current) {
+          const payload = pendingReturnRecord.current.payload;
+          setReturnSale(sale);
+          setSaleReturns(Array.isArray(returns) ? returns : []);
+          setReturnPendingPayload(payload);
+          setReturnRetryPending(true);
+          setReturnReason(payload.reason || "");
+          setReturnQuantities(Object.fromEntries((payload.items || []).map((item) => [item.saleItemId, item.quantity])));
+          setReturnDispositions(Object.fromEntries((payload.items || []).map((item) => [item.saleItemId, item.restockDisposition || "RESTOCK"])));
+          setReturnDispositionReasons(Object.fromEntries((payload.items || []).map((item) => [item.saleItemId, item.dispositionReason || ""])));
+          const refund = payload.refundPayments?.[0];
+          if (refund) {
+            setReturnPaymentMethod(refund.paymentMethod || "CASH");
+            setReturnPaymentReference(refund.transactionReference || "");
+          }
+          setError("An unfinished return was recovered. Review the original sale and enter a manager password to retry the exact original request.");
+        }
+      } catch (err) {
+        if (!cancelled) setError(`A pending financial operation could not be restored: ${err.message}. Its saved request remains available in this tab; refresh after connectivity is restored.`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => { loadLocations(); }, [loadLocations]);
   useEffect(() => { loadRegisters(); }, [loadRegisters]);
   useEffect(() => { if (registerId) loadCurrentShift(); }, [registerId, loadCurrentShift]);
