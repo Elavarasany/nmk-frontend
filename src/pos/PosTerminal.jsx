@@ -226,6 +226,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [purchaseOrderNotes, setPurchaseOrderNotes] = useState("");
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
   const [purchaseOrderRetry, setPurchaseOrderRetry] = useState(false);
+  const [purchaseOrderSubmitTarget, setPurchaseOrderSubmitTarget] = useState(null);
+  const [purchaseOrderSubmitPassword, setPurchaseOrderSubmitPassword] = useState("");
   const [purchaseOrderPayload, setPurchaseOrderPayload] = useState(null);
   const purchaseOrderPending = useRef(null);
   const [receivingOrder, setReceivingOrder] = useState(null);
@@ -344,13 +346,26 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     } finally { setProcurementSaving(false); }
   };
 
-  const submitPurchaseOrder = async (order) => {
+  const openPurchaseOrderSubmit = (order) => {
+    setProcurementActionError("");
+    setPurchaseOrderSubmitPassword("");
+    setPurchaseOrderSubmitTarget(order);
+  };
+
+  const submitPurchaseOrder = async () => {
+    if (!purchaseOrderSubmitTarget) return;
     setProcurementSaving(true);
     onError("");
     try {
-      await apiRequest(`/admin/procurement/purchase-orders/${order.id}/submit`, { method: "POST" });
+      const authorizationToken = await authorizePosAction("PURCHASE_ORDER_SUBMIT", purchaseOrderSubmitPassword);
+      await apiRequest(`/admin/procurement/purchase-orders/${purchaseOrderSubmitTarget.id}/submit`, {
+        method: "POST", headers: { "X-Admin-Action-Authorization": authorizationToken },
+      });
+      const submittedNumber = purchaseOrderSubmitTarget.orderNumber;
+      setPurchaseOrderSubmitTarget(null);
+      setPurchaseOrderSubmitPassword("");
       await loadProcurement();
-      onNotice(`Purchase order ${order.orderNumber} submitted to supplier.`);
+      onNotice(`Purchase order ${submittedNumber} submitted to supplier.`);
     } catch (err) { onError(err.message); }
     finally { setProcurementSaving(false); }
   };
@@ -922,7 +937,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                     </div>)}</div>
                   </details>
                   <div className="pos-po-actions">
-                    {order.status === "DRAFT" && <button type="button" className="pos-button secondary compact" onClick={() => submitPurchaseOrder(order)} disabled={procurementSaving}>Submit order</button>}
+                    {order.status === "DRAFT" && <button type="button" className="pos-button secondary compact" onClick={() => openPurchaseOrderSubmit(order)} disabled={procurementSaving}>Submit order</button>}
                     {["ORDERED", "PARTIALLY_RECEIVED"].includes(order.status) && <button type="button" className="pos-button primary compact" onClick={() => openGoodsReceipt(order)} disabled={stockCountActive}>Receive goods</button>}
                     {["PARTIALLY_RECEIVED", "RECEIVED"].includes(order.status) && order.items.some((item) => item.receivedQuantity > item.returnedQuantity) &&
                       <button type="button" className="pos-button secondary compact" onClick={() => openSupplierReturn(order)} disabled={stockCountActive}>Return to supplier</button>}
@@ -1015,6 +1030,24 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           </form>
         </section>
       </div>
+
+      {purchaseOrderSubmitTarget && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !procurementSaving) setPurchaseOrderSubmitTarget(null);
+      }}>
+        <section className="pos-procurement-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-order-submit-title">
+          <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">PURCHASE ORDER</span><h2 id="purchase-order-submit-title">{purchaseOrderSubmitTarget.orderNumber}</h2></div>
+            <button type="button" className="pos-icon-button" onClick={() => setPurchaseOrderSubmitTarget(null)} disabled={procurementSaving} aria-label="Close purchase order confirmation"><X /></button></div>
+          <p>Submitting changes this draft into an order placed with the supplier. Confirm the order details before continuing.</p>
+          <label className="pos-return-field">Confirm staff password<input type="password" autoComplete="current-password"
+            value={purchaseOrderSubmitPassword} onChange={(event) => setPurchaseOrderSubmitPassword(event.target.value)}
+            disabled={procurementSaving} placeholder="Required to submit purchase order" /></label>
+          <div className="pos-modal-actions">
+            <button type="button" className="pos-button secondary" onClick={() => setPurchaseOrderSubmitTarget(null)} disabled={procurementSaving}>Cancel</button>
+            <button type="button" className="pos-button primary" onClick={submitPurchaseOrder}
+              disabled={procurementSaving || !purchaseOrderSubmitPassword.trim()}>{procurementSaving ? "Submitting…" : "Confirm and submit order"}</button>
+          </div>
+        </section>
+      </div>}
 
       {receivingOrder && <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
         if (event.target === event.currentTarget && !goodsReceiptSaving && !goodsReceiptRetry) setReceivingOrder(null);
