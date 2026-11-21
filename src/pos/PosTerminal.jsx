@@ -1716,7 +1716,9 @@ export default function PosTerminal() {
     <main className="pos-app">
       <header className="pos-topbar">
         <div className="pos-brand">
-          <button type="button" className="pos-back-button" onClick={() => navigate("/admin/dashboard")} aria-label="Back to admin dashboard"><ArrowLeft size={18} /></button>
+          {staffRole === "ADMIN" && (
+            <button type="button" className="pos-back-button" onClick={() => navigate("/admin/dashboard")} aria-label="Back to admin dashboard"><ArrowLeft size={18} /></button>
+          )}
           <div><strong>NMK <span>OPTICALS</span></strong><small>POINT OF SALE</small></div>
         </div>
         <div className="pos-topbar-right">
