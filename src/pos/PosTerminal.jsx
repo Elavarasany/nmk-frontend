@@ -1272,6 +1272,8 @@ export default function PosTerminal() {
   const [exchangePendingPayload, setExchangePendingPayload] = useState(null);
   const exchangePendingKey = useRef(null);
   const pendingKey = useRef(null);
+  const openShiftPayload = useRef(null);
+  const cashMovementPayload = useRef(null);
   const searchRef = useRef(null);
 
   const loadLocations = useCallback(async () => {
@@ -1329,25 +1331,32 @@ export default function PosTerminal() {
   }, [registerId]);
 
   const openShift = async () => {
-    if (!registerId) { setError("Select a register before opening a shift."); return; }
-    const float = Number(openingFloat);
-    if (!Number.isFinite(float) || float < 0) { setError("Enter a valid opening cash float."); return; }
+    if (!openShiftPayload.current) {
+      if (!registerId) { setError("Select a register before opening a shift."); return; }
+      const float = Number(openingFloat);
+      if (!Number.isFinite(float) || float < 0) { setError("Enter a valid opening cash float."); return; }
+      openShiftPayload.current = {
+        registerId: Number(registerId),
+        openingFloat: Number(amount(float)),
+        idempotencyKey: newIdempotencyKey(),
+      };
+    }
     setShiftSaving(true);
     setError("");
     try {
       const opened = await apiRequest("/admin/pos/shifts/open", {
         method: "POST",
-        body: JSON.stringify({
-          registerId: Number(registerId),
-          openingFloat: Number(amount(float)),
-          idempotencyKey: newIdempotencyKey(),
-        }),
+        body: JSON.stringify(openShiftPayload.current),
       });
+      openShiftPayload.current = null;
       setShift(opened);
       setClosingCashCount(amount(opened.expectedCash));
       setNotice("Cashier shift opened.");
     } catch (err) {
-      setError(err.message);
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      if (!uncertain) openShiftPayload.current = null;
+      setError(`${err.message}${uncertain ? " Retry the exact same shift-opening request; its idempotency key is retained." : ""}`);
+      if (uncertain) await loadCurrentShift();
     } finally {
       setShiftSaving(false);
     }
@@ -1379,31 +1388,45 @@ export default function PosTerminal() {
   };
 
   const addCashMovement = async () => {
-    if (!shift?.id) { setError("Open a shift before recording drawer cash."); return; }
-    const value = Number(cashMovementAmount);
-    if (!Number.isFinite(value) || value <= 0 || !cashMovementReason.trim()) {
-      setError("Enter a positive amount and a reason for the cash movement.");
-      return;
+    if (!cashMovementPayload.current) {
+      if (!shift?.id) { setError("Open a shift before recording drawer cash."); return; }
+      const value = Number(cashMovementAmount);
+      if (!Number.isFinite(value) || value <= 0 || !cashMovementReason.trim()) {
+        setError("Enter a positive amount and a reason for the cash movement.");
+        return;
+      }
+      cashMovementPayload.current = {
+        shiftId: Number(shift.id),
+        movementType: cashMovementType,
+        amount: Number(amount(value)),
+        idempotencyKey: newIdempotencyKey(),
+        reason: cashMovementReason.trim(),
+      };
     }
+    const payload = cashMovementPayload.current;
     setShiftSaving(true);
     setError("");
     try {
-      const updated = await apiRequest(`/admin/pos/shifts/${shift.id}/cash-movements`, {
+      const updated = await apiRequest(`/admin/pos/shifts/${payload.shiftId}/cash-movements`, {
         method: "POST",
         body: JSON.stringify({
-          movementType: cashMovementType,
-          amount: Number(amount(value)),
-          idempotencyKey: newIdempotencyKey(),
-          reason: cashMovementReason.trim(),
+          movementType: payload.movementType,
+          amount: payload.amount,
+          idempotencyKey: payload.idempotencyKey,
+          reason: payload.reason,
         }),
       });
+      cashMovementPayload.current = null;
       setShift(updated);
       setClosingCashCount(amount(updated.expectedCash));
       setCashMovementAmount("");
       setCashMovementReason("");
-      setNotice(cashMovementType === "CASH_IN" ? "Cash added to drawer." : "Cash removed from drawer.");
+      setNotice(payload.movementType === "CASH_IN" ? "Cash added to drawer." : "Cash removed from drawer.");
     } catch (err) {
-      setError(err.message);
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      if (!uncertain) cashMovementPayload.current = null;
+      setError(`${err.message}${uncertain ? " Retry the exact same cash movement; its idempotency key is retained." : ""}`);
+      if (uncertain) await loadCurrentShift();
     } finally {
       setShiftSaving(false);
     }
