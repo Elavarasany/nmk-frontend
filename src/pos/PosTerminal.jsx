@@ -980,6 +980,16 @@ export default function PosTerminal() {
   const [historyPage, setHistoryPage] = useState(0);
   const [historyPages, setHistoryPages] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [reportFrom, setReportFrom] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
+  const [reportTo, setReportTo] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
+  const [salesReport, setSalesReport] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
@@ -1179,6 +1189,17 @@ export default function PosTerminal() {
     finally { setCatalogLoading(false); }
   }, [locationId]);
 
+  const loadSalesReport = useCallback(async () => {
+    if (!locationId || !reportFrom || !reportTo) return;
+    setReportLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(`/admin/pos/reports/sales?locationId=${encodeURIComponent(locationId)}&from=${encodeURIComponent(reportFrom)}&to=${encodeURIComponent(reportTo)}`);
+      setSalesReport(data);
+    } catch (err) { setError(err.message); }
+    finally { setReportLoading(false); }
+  }, [locationId, reportFrom, reportTo]);
+
   const loadHistory = useCallback(async (page = 0) => {
     setHistoryLoading(true);
     setError("");
@@ -1196,6 +1217,7 @@ export default function PosTerminal() {
   useEffect(() => { if (registerId) loadCurrentShift(); }, [registerId, loadCurrentShift]);
   useEffect(() => { if (locationId) loadCatalog(); }, [locationId, loadCatalog]);
   useEffect(() => { if (activeTab === "history") loadHistory(0); }, [activeTab, loadHistory]);
+  useEffect(() => { if (activeTab === "reports") loadSalesReport(); }, [activeTab, loadSalesReport]);
 
   const categories = useMemo(() => ["All", ...new Set(catalog.map((p) => p.category).filter(Boolean))], [catalog]);
   const filteredProducts = useMemo(() => {
@@ -1552,6 +1574,7 @@ export default function PosTerminal() {
             <button type="button" className={`pos-tab-button ${activeTab === "checkout" ? "active" : ""}`} onClick={() => setActiveTab("checkout")}><ShoppingCart size={17} /> New sale</button>
             {canManageInventory && <button type="button" className={`pos-tab-button ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}><Package size={17} /> Inventory</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}><History size={17} /> Sales history</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><ChartNoAxesCombined size={17} /> Reports</button>}
           </div>
         </div>
 
@@ -1727,6 +1750,53 @@ export default function PosTerminal() {
           </div>
         ) : activeTab === "inventory" ? (
           <InventoryPanel locationId={locationId} catalog={catalog} onRefreshCatalog={loadCatalog} onNotice={setNotice} onError={setError} />
+        ) : activeTab === "reports" ? (
+          <section className="pos-history-panel pos-report-panel">
+            <div className="pos-panel-heading">
+              <div><h2>Sales and refund reports</h2><p>Completed POS sales and returns processed during the selected period. No tax or profit calculations are included.</p></div>
+              <button type="button" className="pos-button secondary compact" onClick={loadSalesReport} disabled={reportLoading}><RefreshCw size={15} className={reportLoading ? "pos-spin" : ""} /> Refresh</button>
+            </div>
+            <div className="pos-report-filters">
+              <label>From<input type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} /></label>
+              <label>To<input type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} /></label>
+              <button type="button" className="pos-button primary" onClick={loadSalesReport} disabled={reportLoading || !reportFrom || !reportTo || reportTo < reportFrom}>Run report</button>
+            </div>
+            {reportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Calculating report…</span></div>
+              : !salesReport ? <div className="pos-empty-state"><ChartNoAxesCombined /><strong>No report loaded</strong><span>Choose a date range and run the report.</span></div>
+                : <>
+                  <div className="pos-report-summary">
+                    <article><span>Transactions</span><strong>{salesReport.transactionCount}</strong></article>
+                    <article><span>Subtotal</span><strong>{money(salesReport.subtotal)}</strong></article>
+                    <article><span>Discounts</span><strong>{money(salesReport.discounts)}</strong></article>
+                    <article><span>Sales after discount</span><strong>{money(salesReport.netSalesBeforeRefunds)}</strong></article>
+                    <article><span>Refunds</span><strong>{money(salesReport.refunds)}</strong></article>
+                    <article><span>Net after refunds</span><strong>{money(salesReport.netSalesAfterRefunds)}</strong></article>
+                  </div>
+                  <div className="pos-report-grid">
+                    <section><h3>Sales by payment method</h3>
+                      {Object.keys(salesReport.salesByPaymentMethod || {}).length ? Object.entries(salesReport.salesByPaymentMethod).map(([method, total]) => <div className="pos-report-row" key={method}><span>{method}</span><strong>{money(total)}</strong></div>) : <p>No sales tenders.</p>}
+                    </section>
+                    <section><h3>Refunds by payment method</h3>
+                      {Object.keys(salesReport.refundsByPaymentMethod || {}).length ? Object.entries(salesReport.refundsByPaymentMethod).map(([method, total]) => <div className="pos-report-row" key={method}><span>{method}</span><strong>{money(total)}</strong></div>) : <p>No refunds in this period.</p>}
+                    </section>
+                  </div>
+                  <section className="pos-report-table-section"><h3>Cashier totals</h3>
+                    <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Cashier</th><th>Transactions</th><th>Subtotal</th><th>Discounts</th><th>Net sales</th></tr></thead><tbody>
+                      {(salesReport.cashiers || []).map((row) => <tr key={row.cashierUsername}><td>{row.cashierUsername}</td><td>{row.transactionCount}</td><td>{money(row.subtotal)}</td><td>{money(row.discounts)}</td><td><strong>{money(row.netSales)}</strong></td></tr>)}
+                    </tbody></table></div>
+                  </section>
+                  <section className="pos-report-table-section"><h3>Daily totals</h3>
+                    <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Date</th><th>Transactions</th><th>Sales</th><th>Returns</th><th>Refunds</th><th>Net after refunds</th></tr></thead><tbody>
+                      {(salesReport.daily || []).map((row) => <tr key={row.date}><td>{row.date}</td><td>{row.transactionCount}</td><td>{money(row.netSales)}</td><td>{row.returnCount}</td><td>{money(row.refunds)}</td><td><strong>{money(row.netAfterRefunds)}</strong></td></tr>)}
+                    </tbody></table></div>
+                  </section>
+                  <section className="pos-report-table-section"><h3>Top products</h3>
+                    <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Product</th><th>SKU</th><th>Qty sold</th><th>Gross line total</th></tr></thead><tbody>
+                      {(salesReport.topProducts || []).map((row) => <tr key={row.productId}><td>{row.productName}</td><td>{row.sku || "—"}</td><td>{row.quantitySold}</td><td><strong>{money(row.grossLineTotal)}</strong></td></tr>)}
+                    </tbody></table></div>
+                  </section>
+                </>}
+          </section>
         ) : (
           <section className="pos-history-panel">
             <div className="pos-panel-heading"><div><h2>Sales history</h2><p>Completed in-store transactions for the selected location.</p></div><button type="button" className="pos-button secondary compact" onClick={() => loadHistory(historyPage)} disabled={historyLoading}><RefreshCw size={16} className={historyLoading ? "pos-spin" : ""} /> Refresh</button></div>
