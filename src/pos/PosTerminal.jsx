@@ -1319,7 +1319,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
         {movementLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading stock movements…</span></div>
           : movementRows.length === 0 ? <div className="pos-empty-state"><ClipboardCheck /><strong>No stock movements found</strong><span>Receipts, sales and other stock ledger events will appear here.</span></div>
             : <div className="pos-history-table-wrap"><table className="pos-history-table">
-              <thead><tr><th>Date</th><th>Product / SKU</th><th>Movement</th><th>Qty Δ</th><th>Reserved Δ</th><th>On hand after</th><th>Reserved after</th><th>Reference</th><th>Reason</th></tr></thead>
+              <thead><tr><th>Date</th><th>Product / SKU</th><th>Movement</th><th>Qty Δ</th><th>Reserved Δ</th><th>On hand after</th><th>Reserved after</th><th>Reference</th><th>Actor</th><th>Reason</th></tr></thead>
               <tbody>{movementRows.map((movement) => <tr key={movement.id}>
                 <td>{movement.createdAt ? new Date(movement.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—"}</td>
                 <td><strong>{movement.productName}</strong><small>{movement.variantName} · {movement.sku}</small></td>
@@ -1328,6 +1328,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                 <td>{Number(movement.reservedDelta) > 0 ? "+" : ""}{movement.reservedDelta}</td>
                 <td>{movement.onHandAfter}</td><td>{movement.reservedAfter}</td>
                 <td>{movement.referenceType || "—"}{movement.referenceId ? <small>#{movement.referenceId}</small> : null}</td>
+                <td>{movement.actorStaffId != null ? `Staff #${movement.actorStaffId}` : "System / online"}</td>
                 <td>{movement.reason || "—"}</td>
               </tr>)}</tbody>
             </table></div>}
