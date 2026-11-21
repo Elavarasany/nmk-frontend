@@ -2406,7 +2406,7 @@ export default function PosTerminal() {
                 </>}
             <section className="pos-procurement-cost-report">
               <div className="pos-panel-heading">
-                <div><h2>Procurement cost report</h2><p>Recorded goods receipts less supplier returns. This is not inventory valuation, supplier payments, COGS or profit.</p></div>
+                <div><h2>Procurement cost report</h2><p>Recorded goods receipts less supplier returns, using the unit costs entered on purchase orders. Freight, tax, discounts, credit notes and other landed-cost allocations are excluded. This is not verified supplier-invoice cost, inventory valuation, supplier payments, COGS or profit.</p></div>
                 <button type="button" className="pos-button secondary compact" onClick={loadProcurementCostReport} disabled={procurementCostReportLoading}>
                   <RefreshCw size={15} className={procurementCostReportLoading ? "pos-spin" : ""} /> Refresh
                 </button>
