@@ -748,11 +748,15 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                     <td><strong>{line.productName}</strong><small>{line.variantName} · {line.sku}</small></td>
                     <td>{line.snapshotOnHand}</td>
                     <td>{stockCount.status === "COUNTING"
-                      ? <input type="number" min="0" step="1" value={stockCountDrafts[line.id] ?? (line.countedQuantity ?? "")}
-                          onChange={(event) => setStockCountDrafts((current) => ({ ...current, [line.id]: event.target.value }))} disabled={stockCountSaving} />
-                      : line.countedQuantity}</td>
+                      ? <>
+                          <input type="number" min="0" step="1" value={stockCountDrafts[line.id] ?? (line.countedQuantity ?? "")}
+                            onChange={(event) => setStockCountDrafts((current) => ({ ...current, [line.id]: event.target.value }))}
+                            disabled={stockCountSaving || Boolean(line.countedByUsername && line.countedByUsername.toLowerCase() !== currentStaffUsername.toLowerCase())} />
+                          {line.countedByUsername && <small>Counted by {line.countedByUsername}</small>}
+                        </>
+                      : <>{line.countedQuantity}{line.countedByUsername && <small>Counted by {line.countedByUsername}</small>}</>}</td>
                     <td>{line.variance == null ? "—" : <strong className={line.variance === 0 ? "" : line.variance > 0 ? "pos-count-positive" : "pos-count-negative"}>{line.variance > 0 ? "+" : ""}{line.variance}</strong>}</td>
-                    <td>{stockCount.status === "COUNTING" && <button type="button" className="pos-button secondary compact" onClick={() => saveStockCountLine(line)} disabled={stockCountSaving || stockCountDrafts[line.id] == null}>Save</button>}</td>
+                    <td>{stockCount.status === "COUNTING" && <button type="button" className="pos-button secondary compact" onClick={() => saveStockCountLine(line)} disabled={stockCountSaving || stockCountDrafts[line.id] == null || Boolean(line.countedByUsername && line.countedByUsername.toLowerCase() !== currentStaffUsername.toLowerCase())}>Save</button>}</td>
                   </tr>)}</tbody>
                 </table>
               </div>
