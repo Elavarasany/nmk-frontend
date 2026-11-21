@@ -417,6 +417,19 @@ export default function PosTerminal() {
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
   const [selectedHistorySale, setSelectedHistorySale] = useState(null);
+  const [returnSale, setReturnSale] = useState(null);
+  const [saleReturns, setSaleReturns] = useState([]);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnDispositions, setReturnDispositions] = useState({});
+  const [returnDispositionReasons, setReturnDispositionReasons] = useState({});
+  const [returnPaymentMethod, setReturnPaymentMethod] = useState("CASH");
+  const [returnPaymentReference, setReturnPaymentReference] = useState("");
+  const [returnLoading, setReturnLoading] = useState(false);
+  const [returnSaving, setReturnSaving] = useState(false);
+  const [returnRetryPending, setReturnRetryPending] = useState(false);
+  const [returnPendingPayload, setReturnPendingPayload] = useState(null);
+  const returnPendingKey = useRef(null);
   const pendingKey = useRef(null);
   const searchRef = useRef(null);
 
@@ -636,6 +649,42 @@ export default function PosTerminal() {
   const cashChange = payments.filter((p) => p.paymentMethod === "CASH")
     .reduce((sum, p) => sum + Math.max(0, (Number(p.tenderedAmount) || 0) - (Number(p.amount) || 0)), 0);
 
+  const getReturnLineInfo = (item) => {
+    if (!returnSale) return { remaining: 0, refund: 0 };
+    const previous = saleReturns.flatMap((record) => record.items || [])
+      .filter((returned) => Number(returned.saleItemId) === Number(item.id));
+    const returnedQuantity = previous.reduce((sum, returned) => sum + Number(returned.quantity || 0), 0);
+    const previouslyRefunded = previous.reduce((sum, returned) => sum + Number(returned.refundAmount || 0), 0);
+    const remaining = Math.max(0, Number(item.quantity || 0) - returnedQuantity);
+    const quantity = Math.min(remaining, Math.max(0, Number(returnQuantities[item.id] || 0)));
+    const sorted = [...(returnSale.items || [])].sort((a, b) => Number(a.id) - Number(b.id));
+    let allocatedDiscount = 0;
+    let lineDiscount = 0;
+    const subtotalValue = Number(returnSale.subtotal || 0);
+    const totalDiscount = Number(returnSale.discountAmount || 0);
+    sorted.forEach((saleLine, index) => {
+      const lineGross = Number(saleLine.lineTotal || 0);
+      const share = index === sorted.length - 1
+        ? Number((totalDiscount - allocatedDiscount).toFixed(2))
+        : subtotalValue > 0
+          ? Number((totalDiscount * lineGross / subtotalValue).toFixed(2))
+          : 0;
+      if (Number(saleLine.id) === Number(item.id)) lineDiscount = share;
+      allocatedDiscount += share;
+    });
+    const netLine = Math.max(0, Number((Number(item.lineTotal || 0) - lineDiscount).toFixed(2)));
+    const refund = quantity === 0 ? 0
+      : quantity === remaining
+        ? Math.max(0, Number((netLine - previouslyRefunded).toFixed(2)))
+        : Number((netLine * quantity / Number(item.quantity || 1)).toFixed(2));
+    return { remaining, refund };
+  };
+
+  const returnQuote = useMemo(() => {
+    if (!returnSale) return 0;
+    return (returnSale.items || []).reduce((sum, item) => sum + getReturnLineInfo(item).refund, 0);
+  }, [returnSale, saleReturns, returnQuantities]);
+
   useEffect(() => {
     if (payments.length === 1) {
       setPayments((current) => current.length === 1 ? [{
@@ -771,6 +820,123 @@ export default function PosTerminal() {
       }
       setError(`${err.message} Your cart is preserved.${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same checkout; the same request key will be reused to prevent a duplicate sale." : " Correct the details and submit again."}`);
     } finally { setCheckoutLoading(false); }
+  };
+
+  const beginReturn = async () => {
+    if (!selectedHistorySale) return;
+    setReturnLoading(true);
+    setError("");
+    try {
+      const rows = await apiRequest(`/admin/pos/sales/${selectedHistorySale.id}/returns`);
+      setSaleReturns(Array.isArray(rows) ? rows : []);
+      setReturnSale(selectedHistorySale);
+      setReturnReason("");
+      setReturnQuantities({});
+      setReturnDispositions({});
+      setReturnDispositionReasons({});
+      setReturnPaymentMethod("CASH");
+      setReturnPaymentReference("");
+      setReturnRetryPending(false);
+      setReturnPendingPayload(null);
+      returnPendingKey.current = null;
+      setSelectedHistorySale(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReturnLoading(false);
+    }
+  };
+
+  const submitReturn = async () => {
+    if (!returnSale) return;
+    if (!shift?.id || shift.status !== "OPEN") {
+      setError("Open your own cashier shift before processing a return.");
+      return;
+    }
+    if (!returnReason.trim()) {
+      setError("A return reason is required.");
+      return;
+    }
+
+    const selectedItems = (returnSale.items || []).filter((item) => Number(returnQuantities[item.id] || 0) > 0);
+    if (!selectedItems.length) {
+      setError("Select at least one quantity to return.");
+      return;
+    }
+    for (const item of selectedItems) {
+      const disposition = returnDispositions[item.id] || "RESTOCK";
+      if (disposition !== "RESTOCK" && !(returnDispositionReasons[item.id] || "").trim()) {
+        setError("Explain why each damaged or discarded item cannot be restocked.");
+        return;
+      }
+    }
+    if (returnQuote > 0 && returnPaymentMethod !== "CASH" && !returnPaymentReference.trim()) {
+      setError("Enter the completed UPI/card refund transaction reference.");
+      return;
+    }
+
+    if (!returnPendingPayload) {
+      returnPendingKey.current = returnPendingKey.current || newIdempotencyKey();
+      const payload = {
+        shiftId: Number(shift.id),
+        reason: returnReason.trim(),
+        idempotencyKey: returnPendingKey.current,
+        items: selectedItems.map((item) => ({
+          saleItemId: Number(item.id),
+          quantity: Number(returnQuantities[item.id]),
+          restockDisposition: returnDispositions[item.id] || "RESTOCK",
+          dispositionReason: (returnDispositionReasons[item.id] || "").trim() || null,
+        })),
+        refundPayments: returnQuote > 0 ? [{
+          paymentMethod: returnPaymentMethod,
+          amount: Number(amount(returnQuote)),
+          ...(returnPaymentMethod !== "CASH" ? { transactionReference: returnPaymentReference.trim() } : {}),
+        }] : [],
+      };
+      setReturnPendingPayload(payload);
+    }
+
+    const payload = returnPendingPayload || {
+      shiftId: Number(shift.id),
+      reason: returnReason.trim(),
+      idempotencyKey: returnPendingKey.current,
+      items: selectedItems.map((item) => ({
+        saleItemId: Number(item.id),
+        quantity: Number(returnQuantities[item.id]),
+        restockDisposition: returnDispositions[item.id] || "RESTOCK",
+        dispositionReason: (returnDispositionReasons[item.id] || "").trim() || null,
+      })),
+      refundPayments: returnQuote > 0 ? [{
+        paymentMethod: returnPaymentMethod,
+        amount: Number(amount(returnQuote)),
+        ...(returnPaymentMethod !== "CASH" ? { transactionReference: returnPaymentReference.trim() } : {}),
+      }] : [],
+    };
+
+    setReturnSaving(true);
+    setError("");
+    try {
+      const record = await apiRequest(`/admin/pos/sales/${returnSale.id}/returns`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setReturnSale(null);
+      setReturnPendingPayload(null);
+      returnPendingKey.current = null;
+      setReturnRetryPending(false);
+      setNotice(`Return ${record.returnNumber} recorded. Refund total: ${money(record.refundTotal)}.`);
+      await Promise.all([loadCatalog(), loadCurrentShift(), loadHistory(historyPage)]);
+    } catch (err) {
+      const uncertain = !err.status || err.status >= 500 || err.status === 409;
+      setReturnRetryPending(uncertain);
+      if (!uncertain) {
+        setReturnPendingPayload(null);
+        returnPendingKey.current = null;
+      }
+      setError(`${err.message}${uncertain ? " Retry the exact same return request; its original idempotency key is retained." : ""}`);
+    } finally {
+      setReturnSaving(false);
+    }
   };
 
   const openHistorySale = async (sale) => {
@@ -1005,9 +1171,83 @@ export default function PosTerminal() {
         <section className="pos-history-modal" role="dialog" aria-modal="true" aria-labelledby="pos-history-title">
           <div className="pos-modal-toolbar"><div><span className="pos-eyebrow">TRANSACTION DETAILS</span><h2 id="pos-history-title">{selectedHistorySale.invoiceNumber}</h2></div><button type="button" className="pos-icon-button" onClick={() => setSelectedHistorySale(null)} aria-label="Close details"><X /></button></div>
           <div className="pos-history-detail-grid"><div><span>Customer</span><strong>{selectedHistorySale.customerName || "Walk-in"}</strong></div><div><span>Phone</span><strong>{selectedHistorySale.customerPhone || "—"}</strong></div><div><span>Cashier</span><strong>{selectedHistorySale.cashierUsername}</strong></div><div><span>Date</span><strong>{formatDate(selectedHistorySale.createdAt)}</strong></div><div><span>Total</span><strong>{money(selectedHistorySale.grandTotal)}</strong></div></div>
-          <div className="pos-modal-actions"><button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button><button type="button" className="pos-button primary" onClick={openReceiptFromHistory}><Printer size={17} /> Print invoice</button></div>
+          <div className="pos-modal-actions">
+            <button type="button" className="pos-button secondary" onClick={() => setSelectedHistorySale(null)}>Close</button>
+            {canViewHistory && <button type="button" className="pos-button secondary" onClick={beginReturn} disabled={returnLoading}>{returnLoading ? "Loading…" : "Process return"}</button>}
+            <button type="button" className="pos-button primary" onClick={openReceiptFromHistory}><Printer size={17} /> Print invoice</button>
+          </div>
         </section>
       </div>}
+      {returnSale && (
+        <div className="pos-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !returnSaving && !returnRetryPending) setReturnSale(null);
+        }}>
+          <section className="pos-return-modal" role="dialog" aria-modal="true" aria-labelledby="pos-return-title">
+            <div className="pos-modal-toolbar">
+              <div><span className="pos-eyebrow">CUSTOMER RETURN</span><h2 id="pos-return-title">{returnSale.invoiceNumber}</h2></div>
+              <button type="button" className="pos-icon-button" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending} aria-label="Close return"><X /></button>
+            </div>
+            <p className="pos-return-note">Return quantities are checked against the original sale and previous returns. Only resaleable items marked RESTOCK will increase stock.</p>
+            <div className="pos-return-lines">
+              <table>
+                <thead><tr><th>Item</th><th>Sold</th><th>Remaining</th><th>Return qty</th><th>Disposition</th></tr></thead>
+                <tbody>
+                  {(returnSale.items || []).map((item) => {
+                    const info = getReturnLineInfo(item);
+                    return <tr key={item.id}>
+                      <td><strong>{item.productName}</strong><small>{item.variantName || item.sku}</small></td>
+                      <td>{item.quantity}</td>
+                      <td>{info.remaining}</td>
+                      <td><input type="number" min="0" max={info.remaining} step="1"
+                        value={returnQuantities[item.id] || ""}
+                        disabled={returnSaving || returnRetryPending || info.remaining <= 0}
+                        onChange={(event) => setReturnQuantities((current) => ({
+                          ...current, [item.id]: Math.min(info.remaining, Math.max(0, Number(event.target.value) || 0))
+                        }))} /></td>
+                      <td>
+                        <select value={returnDispositions[item.id] || "RESTOCK"}
+                          disabled={returnSaving || returnRetryPending || Number(returnQuantities[item.id] || 0) <= 0}
+                          onChange={(event) => setReturnDispositions((current) => ({ ...current, [item.id]: event.target.value }))}>
+                          <option value="RESTOCK">Restock</option><option value="DAMAGED">Damaged</option><option value="DISCARD">Discard</option>
+                        </select>
+                        {(returnDispositions[item.id] || "RESTOCK") !== "RESTOCK" && Number(returnQuantities[item.id] || 0) > 0 &&
+                          <input className="pos-return-disposition-reason" value={returnDispositionReasons[item.id] || ""}
+                            onChange={(event) => setReturnDispositionReasons((current) => ({ ...current, [item.id]: event.target.value }))}
+                            placeholder="Disposition reason" maxLength={500} disabled={returnSaving || returnRetryPending} />}
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <label className="pos-return-field">Return reason
+              <input value={returnReason} onChange={(event) => setReturnReason(event.target.value)} maxLength={500}
+                placeholder="Reason for return" disabled={returnSaving || returnRetryPending} />
+            </label>
+            <div className="pos-return-payment">
+              <div><span>Calculated refund</span><strong>{money(returnQuote)}</strong></div>
+              {returnQuote > 0 && <>
+                <label>Refund method
+                  <select value={returnPaymentMethod} onChange={(event) => setReturnPaymentMethod(event.target.value)} disabled={returnSaving || returnRetryPending}>
+                    <option value="CASH">Cash</option><option value="UPI">UPI</option><option value="CARD">Card</option>
+                  </select>
+                </label>
+                {returnPaymentMethod !== "CASH" && <label>Refund transaction reference
+                  <input value={returnPaymentReference} onChange={(event) => setReturnPaymentReference(event.target.value)}
+                    maxLength={150} placeholder="Provider-confirmed refund reference" disabled={returnSaving || returnRetryPending} />
+                </label>}
+              </>}
+            </div>
+            {returnQuote > 0 && returnPaymentMethod !== "CASH" && <p className="pos-return-warning">Complete and verify the refund in the UPI/card provider first. This POS records the reference; it does not send the provider refund.</p>}
+            <div className="pos-modal-actions">
+              <button type="button" className="pos-button secondary" onClick={() => setReturnSale(null)} disabled={returnSaving || returnRetryPending}>Cancel</button>
+              <button type="button" className="pos-button primary" onClick={submitReturn} disabled={returnSaving || !shift?.id || shift.status !== "OPEN"}>
+                {returnSaving ? "Recording…" : returnRetryPending ? "Retry same return" : "Confirm return"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       <ReceiptView sale={receipt} onClose={() => setReceipt(null)} />
     </main>
   );
