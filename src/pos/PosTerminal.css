@@ -188,6 +188,8 @@
 .pos-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 39px; padding: 0 15px; border-radius: 8px; font-size: 11px; font-weight: 750; }
 .pos-button.primary { border: 1px solid var(--pos-navy); background: var(--pos-navy); color: #fff; }
 .pos-button.secondary { border: 1px solid #dfe5ec; background: #fff; color: #4f5d70; }
+.pos-button.danger { border: 1px solid #a33b3b; background: #a33b3b; color: #fff; }
+.pos-button.danger:hover:not(:disabled) { background: #842d2d; border-color: #842d2d; }
 .pos-button.compact { min-height: 34px; padding: 0 11px; }
 .pos-history-table-wrap { width: 100%; overflow-x: auto; }
 .pos-history-table { width: 100%; border-collapse: collapse; text-align: left; }
