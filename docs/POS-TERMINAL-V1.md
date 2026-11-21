@@ -45,7 +45,7 @@ The operations branch now includes staff roles, register/shift cash reconciliati
 The remaining exclusions are:
 
 - Multi-register cashier assignment, shift reopening, supervisor override thresholds and cross-register cash transfers.
-- Linked exchange transactions that atomically apply returned-goods credit to a replacement sale. A return followed by a new sale is not an atomic exchange; the price-difference collection/refund policy must be confirmed before implementing this safely.
+- Linked atomic exchanges are implemented on the operations branch. Managers/admins can exchange selected quantities from a completed sale for replacement variants in one backend transaction. The workflow applies non-cash exchange credit, collects only a positive difference or records an actual refund for a negative difference, updates stock with RESTOCK/DAMAGED/DISCARD dispositions, requires one-time manager/admin password authorization, and supports idempotent retries plus exchange audit history. Backend endpoint: `POST /api/admin/pos/sales/{saleId}/exchange`; history: `GET /api/admin/pos/sales/{saleId}/exchange`; manual migration: `014-create-pos-exchanges.sql`. Do not use separate return and checkout operations to simulate an exchange.
 - Credit notes, supplier accounts payable, supplier credit settlement and automated provider refund execution. UPI/card refunds must be completed externally and the confirmed reference recorded in POS.
 - GST/tax calculation, profit accounting, landed-cost accounting and accountant-approved invoice/tax wording.
 - A configurable permission-code matrix, per-register access restrictions and threshold-based approval workflows.
