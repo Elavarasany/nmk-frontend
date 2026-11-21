@@ -3,7 +3,7 @@ import {
   ArrowLeft, Search, RefreshCw, Plus, Minus, Trash2, Receipt,
   History, ShoppingCart, Store, Printer, X, CheckCircle2,
   AlertCircle, UserRound, CreditCard,
-  ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck
+  ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck, Truck
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./PosTerminal.css";
