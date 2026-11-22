@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Search, RefreshCw, Plus, Minus, Trash2, Receipt,
-  History, ShoppingCart, Store, Printer, X, CheckCircle2, Clock3,
+  History, ShoppingCart, Store, Printer, X, CheckCircle2, Clock3, FileText,
   AlertCircle, UserRound, CreditCard,
   ChevronLeft, ChevronRight, Package, ScanLine, ClipboardCheck, Truck, BarChart3
 } from "lucide-react";
@@ -693,7 +693,18 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setError("");
     try {
       const data = await apiRequest(`/admin/procurement/suppliers/${encodeURIComponent(selectedSupplierId)}/bills?page=0&size=50`);
-      setSupplierBills(Array.isArray(data?.content) ? data.content : []);
+      const rows = Array.isArray(data?.content) ? data.content : [];
+      setSupplierBills(rows);
+      const pendingPayment = pendingSupplierPaymentRecord.current;
+      if (pendingPayment?.billId && String(pendingPayment.supplierId) === String(selectedSupplierId)) {
+        const target = rows.find((bill) => Number(bill.id) === Number(pendingPayment.billId));
+        if (target) {
+          setSupplierPaymentTarget(target);
+          setSupplierPaymentAmount(String(pendingPayment.amount));
+          setSupplierPaymentMethod(pendingPayment.paymentMethod || "BANK");
+          setSupplierPaymentReference(pendingPayment.reference || "");
+        }
+      }
     } catch (err) { setError(err.message); }
     finally { setSupplierBillsLoading(false); }
   }, [selectedSupplierId, staffRole]);
@@ -771,6 +782,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       if (supplierPaymentMethod === "CASH" && (!shift || shift.status !== "OPEN")) { onError("Open a cashier shift before recording a supplier cash payment."); return; }
       payload = {
         billId: supplierPaymentTarget.id,
+        supplierId: supplierPaymentTarget.supplierId,
         amount,
         paymentMethod: supplierPaymentMethod,
         reference: supplierPaymentReference.trim() || null,
@@ -1268,6 +1280,24 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { loadLowStock(); }, [loadLowStock]);
   useEffect(() => { loadMovementHistory(0); }, [loadMovementHistory]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
+  useEffect(() => {
+    if (supplierBillPayload?.supplierId) {
+      setSelectedSupplierId(String(supplierBillPayload.supplierId));
+      setSupplierBillForm({
+        invoiceNumber: supplierBillPayload.invoiceNumber || "",
+        invoiceDate: supplierBillPayload.invoiceDate || "",
+        dueDate: supplierBillPayload.dueDate || "",
+        amount: String(supplierBillPayload.amount || ""),
+        billType: supplierBillPayload.billType || "GOODS",
+        purchaseOrderId: supplierBillPayload.purchaseOrderId ? String(supplierBillPayload.purchaseOrderId) : "",
+      });
+    }
+  }, [supplierBillPayload]);
+  useEffect(() => {
+    if (pendingSupplierPaymentRecord.current?.supplierId) {
+      setSelectedSupplierId(String(pendingSupplierPaymentRecord.current.supplierId));
+    }
+  }, []);
   useEffect(() => { if (selectedSupplierId && staffRole === "ADMIN") loadSupplierBills(); }, [selectedSupplierId, staffRole, loadSupplierBills]);
   useEffect(() => {
     if (!purchaseOrderPayload) return;
@@ -1561,7 +1591,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <button type="submit" className="pos-button primary" disabled={supplierBillSaving || !selectedSupplierId || !supplierBillPassword.trim()}>
                 {supplierBillSaving ? "Posting…" : supplierBillPayload ? "Retry same bill" : "Post supplier bill"}
               </button>
-              {supplierBillPayload && <p className="pos-retry-note">A bill request is pending. Retry the exact same details; editing is locked to prevent duplicate invoices.</p>}
+              {supplierBillPayload && <p className="pos-retry-note">Pending retry: {supplierBillPayload.invoiceNumber} · {money(supplierBillPayload.amount)}. Retry the exact same details; editing is locked to prevent duplicate invoices.</p>}
             </form>
             <div className="pos-supplier-bills">
               <h5>Supplier bills · {suppliers.find((supplier) => String(supplier.id) === String(selectedSupplierId))?.name || "Select a supplier"}</h5>
