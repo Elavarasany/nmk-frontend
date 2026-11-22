@@ -5337,6 +5337,7 @@ export default function AdminDashboard() {
   const [prefs, setPrefs] = useState(loadPrefs);
 
   const [lists, setLists] = useState({ products: [], orders: [], appointments: [], customers: [], images: [] });
+  const [appointmentsPageInfo, setAppointmentsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [loading, setLoading] = useState({});
   const [listErrors, setListErrors] = useState({});
 
@@ -5399,13 +5400,27 @@ export default function AdminDashboard() {
 
   // Loads one list into state, with its own loading flag
   const loadList = useCallback(
-    async (key) => {
+    async (key, page = 0, append = false) => {
       const { url, message } = LIST_SOURCES[key];
+      const requestUrl = key === "appointments" ? `${url}?page=${page}&size=50` : url;
 
       setLoading((prev) => ({ ...prev, [key]: true }));
       try {
-        const data = await getJson(url, message);
-        if (data) setLists((prev) => ({ ...prev, [key]: data }));
+        const data = await getJson(requestUrl, message);
+        if (key === "appointments" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            appointments: append ? [...prev.appointments, ...data.content] : data.content,
+          }));
+          setAppointmentsPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (data) {
+          setLists((prev) => ({ ...prev, [key]: data }));
+        }
         setListErrors((prev) => ({ ...prev, [key]: "" }));
       } catch (err) {
         setListErrors((prev) => ({ ...prev, [key]: err.message || message }));
@@ -5535,8 +5550,10 @@ export default function AdminDashboard() {
           <AppointmentsPage
             api={api}
             appointments={appointments}
+            pageInfo={appointmentsPageInfo}
             loading={loading.appointments}
             onReload={reloaders.Appointments}
+            onLoadMore={() => loadList("appointments", appointmentsPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
