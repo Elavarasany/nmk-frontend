@@ -3346,7 +3346,7 @@ const cartTotal = cart.reduce(
     ? "Loading products"
     : productError
       ? ""
-      : `${filteredProducts.length} products found`;
+      : `${filteredProducts.length} products loaded${productsHasNext ? " · load more to search the full catalogue" : " found"}`;
 
   const cartSummary = cart.filter(Boolean).map((item) => (
     <div className="checkout-summary-item" key={cartLineKey(item)}>
