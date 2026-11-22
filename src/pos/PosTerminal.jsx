@@ -235,7 +235,7 @@ function StalePaymentCreationReviewPanel() {
       setData(result);
       setPage(nextPage);
     } catch (err) {
-      setError(err.message || "Unable to load stale payment creations.");
+      setError(err.message || "Unable to load expired payment reservations.");
     } finally {
       setLoading(false);
     }
@@ -246,7 +246,7 @@ function StalePaymentCreationReviewPanel() {
   return (
     <section className="pos-history-panel pos-webhook-review">
       <div className="pos-panel-heading">
-        <div><h2>Stale payment creation review</h2><p>Orders still marked as creating a Razorpay order after the selected age. Review these before taking any recovery action.</p></div>
+        <div><h2>Expired payment review</h2><p>Pending orders with expired stock reservations and unresolved Razorpay payment creation. Review these before taking any recovery action.</p></div>
         <button type="button" className="pos-button secondary compact" onClick={() => loadQueue(page)} disabled={loading}>
           <RefreshCw size={15} className={loading ? "pos-spin" : ""} /> Refresh
         </button>
@@ -268,8 +268,8 @@ function StalePaymentCreationReviewPanel() {
         </label>
       </div>
       {error && <div className="pos-alert error" role="alert"><AlertCircle size={17} /><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={15} /></button></div>}
-      {loading && !data ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading stale payment creations…</span></div>
-        : !data?.content?.length ? <div className="pos-empty-state"><CheckCircle2 /><strong>No stale payment creations</strong><span>There are no pending payment-creation records older than {olderThanMinutes} minutes.</span></div>
+      {loading && !data ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading expired payment reservations…</span></div>
+        : !data?.content?.length ? <div className="pos-empty-state"><CheckCircle2 /><strong>No expired payment reservations</strong><span>There are no expired pending payment reservations older than {olderThanMinutes} minutes.</span></div>
           : <>
             <div className="pos-webhook-summary"><strong>{data.totalElements || 0} order(s) awaiting review</strong><span>Oldest orders first · Page {data.totalPages ? page + 1 : 0} of {data.totalPages || 0}</span></div>
             <div className="pos-history-table-wrap">
@@ -290,8 +290,8 @@ function StalePaymentCreationReviewPanel() {
             <div className="pos-pagination">
               <span>{data.totalElements || 0} total orders</span>
               <div>
-                <button type="button" disabled={page <= 0 || loading} onClick={() => loadQueue(page - 1)} aria-label="Previous stale payment page"><ChevronLeft size={18} /></button>
-                <button type="button" disabled={page + 1 >= (data.totalPages || 0) || loading} onClick={() => loadQueue(page + 1)} aria-label="Next stale payment page"><ChevronRight size={18} /></button>
+                <button type="button" disabled={page <= 0 || loading} onClick={() => loadQueue(page - 1)} aria-label="Previous expired payment page"><ChevronLeft size={18} /></button>
+                <button type="button" disabled={page + 1 >= (data.totalPages || 0) || loading} onClick={() => loadQueue(page + 1)} aria-label="Next expired payment page"><ChevronRight size={18} /></button>
               </div>
             </div>
           </>}
@@ -2893,7 +2893,7 @@ export default function PosTerminal() {
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "inventory-report" ? "active" : ""}`} onClick={() => setActiveTab("inventory-report")}><ClipboardCheck size={17} /> Stock report</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "shift-history" ? "active" : ""}`} onClick={() => setActiveTab("shift-history")}><Clock3 size={17} /> Shift history</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "payment-review" ? "active" : ""}`} onClick={() => setActiveTab("payment-review")}><AlertCircle size={17} /> Payment exceptions</button>}
-            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "stale-payment-review" ? "active" : ""}`} onClick={() => setActiveTab("stale-payment-review")}><Clock3 size={17} /> Payment creation</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "stale-payment-review" ? "active" : ""}`} onClick={() => setActiveTab("stale-payment-review")}><Clock3 size={17} /> Payment review</button>}
           </div>
         </div>
 
