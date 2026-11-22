@@ -2877,7 +2877,7 @@ function SettlementReconciliationPage({ api }) {
                     <tr key={item.id}>
                       <td>
                         <strong>{item.providerSettlementId}</strong>
-                        <div className="admin-help-text">{formatTimestamp(item.providerCreatedAt)}</div>
+                        <div className="admin-help-text">{formatDateTime(item.providerCreatedAt)}</div>
                       </td>
                       <td><span className="admin-status">{item.status}</span></td>
                       <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
