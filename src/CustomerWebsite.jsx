@@ -2670,6 +2670,33 @@ export default function CustomerWebsite() {
     return () => controller.abort();
   }, [productReloadKey]);
 
+  const loadMoreProducts = useCallback(async () => {
+    if (!productsHasNext || loadingMoreProducts) return;
+    const nextPage = productsPage + 1;
+    setLoadingMoreProducts(true);
+    try {
+      const response = await fetch(`${API_URL}?page=${nextPage}&size=24`);
+      if (!response.ok) throw new Error("Unable to load more products");
+      const payload = await response.json();
+      const rawProducts = Array.isArray(payload) ? payload : payload?.content;
+      if (!Array.isArray(rawProducts)) throw new Error("Unexpected product data");
+
+      const nextProducts = rawProducts.map(toProduct);
+      setProducts((current) => [
+        ...current,
+        ...nextProducts.filter((product) => !current.some((existing) => Number(existing.id) === Number(product.id))),
+      ]);
+      setProductsPage(Array.isArray(payload) ? nextPage : Number(payload.number ?? nextPage));
+      setProductsHasNext(Array.isArray(payload) ? false : Boolean(payload.last === false));
+      setVisibleCount((current) => current + PAGE_SIZE);
+    } catch (error) {
+      console.error("Load more products error:", error);
+      notify("We couldn't load more products right now. Please try again.");
+    } finally {
+      setLoadingMoreProducts(false);
+    }
+  }, [productsHasNext, loadingMoreProducts, productsPage, notify]);
+
   // KEEP SAVED CART IN STEP WITH LOADED PRODUCTS AND DIRECT CART REFERENCES.
   useEffect(() => {
     if (!productsReady || !cartReferencesReady) return;
