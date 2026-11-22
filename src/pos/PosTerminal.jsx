@@ -551,6 +551,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [supplierBills, setSupplierBills] = useState([]);
   const [supplierBillsLoading, setSupplierBillsLoading] = useState(false);
+  const [supplierPaymentHistoryBillId, setSupplierPaymentHistoryBillId] = useState(null);
+  const [supplierPaymentHistory, setSupplierPaymentHistory] = useState([]);
+  const [supplierPaymentHistoryLoading, setSupplierPaymentHistoryLoading] = useState(false);
   const [supplierBillForm, setSupplierBillForm] = useState(() => {
     const today = new Date();
     return { invoiceNumber: "", invoiceDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`, dueDate: "", amount: "", billType: "GOODS", purchaseOrderId: "" };
@@ -758,6 +761,17 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       }
       onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same bill; its idempotency key is retained." : ""}`);
     } finally { setSupplierBillSaving(false); }
+  };
+
+  const loadSupplierPaymentHistory = async (billId) => {
+    setSupplierPaymentHistoryBillId(billId);
+    setSupplierPaymentHistory([]);
+    setSupplierPaymentHistoryLoading(true);
+    try {
+      const rows = await apiRequest(`/admin/procurement/supplier-bills/${billId}/payments`);
+      setSupplierPaymentHistory(Array.isArray(rows) ? rows : []);
+    } catch (err) { onError(err.message); }
+    finally { setSupplierPaymentHistoryLoading(false); }
   };
 
   const beginSupplierPayment = (bill) => {
@@ -1598,13 +1612,26 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               {supplierBillsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading supplier bills…</span></div>
                 : !supplierBills.length ? <div className="pos-empty-state"><FileText /><span>No supplier bills recorded for this supplier.</span></div>
                   : supplierBills.map((bill) => <article className="pos-supplier-bill-card" key={bill.id}>
-                    <div><strong>{bill.invoiceNumber}</strong><span>{bill.billType.replaceAll("_", " ")} · {bill.invoiceDate}</span></div>
+                    <div><strong>{bill.invoiceNumber}</strong><span>{bill.billType.replaceAll("_", " ")} · Invoice {bill.invoiceDate} · Due {bill.dueDate || "on receipt"}</span></div>
                     <div className="pos-supplier-bill-totals"><span>Bill {money(bill.amount)}</span><span>Paid {money(bill.paidAmount)}</span><strong>Due {money(bill.outstandingAmount)}</strong></div>
                     <div className="pos-procurement-form-actions">
+                      <button type="button" className="pos-button secondary compact" onClick={() => loadSupplierPaymentHistory(bill.id)}>Payment history</button>
                       {bill.billType === "LANDED_COST" && <button type="button" className="pos-button secondary compact" onClick={() => loadLandedCostAllocations(bill.id)}>View allocations</button>}
                       {Number(bill.outstandingAmount) > 0 && <button type="button" className="pos-button primary compact" onClick={() => beginSupplierPayment(bill)}>Record payment</button>}
                     </div>
                   </article>)}
+              {supplierPaymentHistoryBillId && <div className="pos-supplier-payment-history">
+                <h5>Payment history · Bill #{supplierPaymentHistoryBillId}</h5>
+                {supplierPaymentHistoryLoading ? <p>Loading payments…</p> : !supplierPaymentHistory.length
+                  ? <p>No confirmed payments recorded.</p>
+                  : <div className="pos-history-table-wrap"><table className="pos-history-table">
+                    <thead><tr><th>Date</th><th>Method</th><th>Amount</th><th>Reference</th><th>Recorded by</th></tr></thead>
+                    <tbody>{supplierPaymentHistory.map((payment) => <tr key={payment.id}>
+                      <td>{payment.paidAt ? new Date(payment.paidAt).toLocaleString("en-IN") : "—"}</td>
+                      <td>{payment.paymentMethod}</td><td>{money(payment.amount)}</td><td>{payment.reference || (payment.shiftId ? `Cash shift #${payment.shiftId}` : "—")}</td><td>{payment.createdByUsername}</td>
+                    </tr>)}</tbody>
+                  </table></div>}
+              </div>}
             </div>
           </div>
           {supplierPaymentTarget && <form className="pos-supplier-payment-form" onSubmit={submitSupplierPayment}>
