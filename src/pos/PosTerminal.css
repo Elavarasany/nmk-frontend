@@ -843,6 +843,33 @@
   display: grid;
   gap: 9px;
 }
+.pos-supplier-aging-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.pos-supplier-aging-summary article {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #e4e9ef;
+  border-radius: 8px;
+  background: #fff;
+}
+.pos-supplier-aging-summary article span,
+.pos-supplier-aging-summary article small {
+  color: #718096;
+  font-size: 10px;
+}
+.pos-supplier-aging-summary article strong {
+  color: var(--pos-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+@media (max-width: 560px) {
+  .pos-supplier-aging-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .pos-supplier-bill-card {
   display: grid;
   gap: 9px;
