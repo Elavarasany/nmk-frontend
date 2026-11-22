@@ -2548,8 +2548,36 @@ const RX_FIELDS = [
 // Prescription the customer entered for one item. Shown only when the order record includes it;
 // otherwise the admin sees that the values were not recorded.
 
-function PrescriptionBlock({ item }) {
+function PrescriptionBlock({ item, api, orderId }) {
   const rx = item.prescription;
+  const [secureUrl, setSecureUrl] = useState("");
+  const [secureError, setSecureError] = useState("");
+  const [loadingSecureUrl, setLoadingSecureUrl] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!rx || rx.mode !== "image") {
+      setSecureUrl("");
+      return () => { active = false; };
+    }
+    if (!rx.publicId) {
+      setSecureUrl(rx.imageUrl || "");
+      return () => { active = false; };
+    }
+    setLoadingSecureUrl(true);
+    setSecureError("");
+    api.getJson(
+      `${ENDPOINTS.orders}/${orderId}/items/${item.id}/prescription`,
+      "Unable to open prescription"
+    ).then((data) => {
+      if (active) setSecureUrl(data?.url || "");
+    }).catch((error) => {
+      if (active) setSecureError(error.message || "Unable to open prescription.");
+    }).finally(() => {
+      if (active) setLoadingSecureUrl(false);
+    });
+    return () => { active = false; };
+  }, [api.getJson, item.id, orderId, rx?.mode, rx?.publicId, rx?.imageUrl]);
 
   if (!rx) {
     return (
@@ -2560,51 +2588,34 @@ function PrescriptionBlock({ item }) {
     );
   }
 
-  // Uploaded prescription image or PDF.
   if (rx.mode === "image") {
-    const isPdf =
-      /\.pdf(\?|$)/i.test(rx.imageUrl || "") ||
-      /\.pdf$/i.test(rx.imageName || "");
-
+    const url = secureUrl;
+    const isPdf = /\.pdf$/i.test(rx.format || "") || /\.pdf$/i.test(rx.imageName || "");
     return (
       <div className="order-rx-image">
-        <p className="order-detail-main">
-          {item.productName}: uploaded prescription
-        </p>
-
-        {!rx.imageUrl && (
-          <p className="order-detail-small">
-            The file link was not saved for this order.
-          </p>
+        <p className="order-detail-main">{item.productName}: uploaded prescription</p>
+        {loadingSecureUrl && <p className="order-detail-small">Preparing secure file access…</p>}
+        {secureError && <p className="order-detail-small" role="alert">{secureError}</p>}
+        {!loadingSecureUrl && !secureError && !url && (
+          <p className="order-detail-small">The prescription file is not available.</p>
         )}
-
-        {rx.imageUrl && !isPdf && (
-          <a
-            href={rx.imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="order-rx-thumb"
-          >
-            <img
-              src={rx.imageUrl}
-              alt={`Prescription for ${item.productName}`}
-              loading="lazy"
-            />
+        {url && !isPdf && (
+          <a href={url} target="_blank" rel="noreferrer" className="order-rx-thumb">
+            <img src={url} alt={`Prescription for ${item.productName}`} loading="lazy" />
           </a>
         )}
-
-        {rx.imageUrl && (
+        {url && (
           <p>
-            <a href={rx.imageUrl} target="_blank" rel="noreferrer">
+            <a href={url} target="_blank" rel="noreferrer">
               {rx.imageName || "Open prescription file"}
             </a>
+            {rx.publicId && <span className="order-detail-small"> · Secure link expires in 5 minutes</span>}
           </p>
         )}
       </div>
     );
   }
 
-  // Contact lens prescription.
   if (rx.mode === "contact") {
     const contactFields = [
       { key: "sph", label: "SPH" },
@@ -2612,90 +2623,41 @@ function PrescriptionBlock({ item }) {
       { key: "axis", label: "Axis" },
       { key: "boxes", label: "Boxes" },
     ];
-
     return (
       <div className="order-rx-block">
-        <p className="order-detail-main">
-          {item.productName}: contact lens prescription
-        </p>
-
+        <p className="order-detail-main">{item.productName}: contact lens prescription</p>
         <table className="admin-table order-items-table">
-          <thead>
-            <tr>
-              <th scope="col">Power</th>
-              <th scope="col">Right eye</th>
-              <th scope="col">Left eye</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {contactFields.map((field) => (
-              <tr key={field.key}>
-                <td>{field.label}</td>
-                <td>{rx.right?.[field.key] || "–"}</td>
-                <td>{rx.left?.[field.key] || "–"}</td>
-              </tr>
-            ))}
-          </tbody>
+          <thead><tr><th scope="col">Power</th><th scope="col">Right eye</th><th scope="col">Left eye</th></tr></thead>
+          <tbody>{contactFields.map((field) => (
+            <tr key={field.key}><td>{field.label}</td><td>{rx.right?.[field.key] || "–"}</td><td>{rx.left?.[field.key] || "–"}</td></tr>
+          ))}</tbody>
         </table>
       </div>
     );
   }
 
-  // Eyeglasses manual prescription.
   const sameForBoth = Boolean(rx.sameForBothEyes);
   const hasAddition = [rx.right, rx.left].some((row) => row?.add);
-
   const fields = RX_FIELDS.filter((field) => {
-    if (field.key === "cyl" || field.key === "axis") {
-      return Boolean(rx.hasCylinder);
-    }
-
-    if (field.key === "add") {
-      return hasAddition;
-    }
-
+    if (field.key === "cyl" || field.key === "axis") return Boolean(rx.hasCylinder);
+    if (field.key === "add") return hasAddition;
     return true;
   });
-
   return (
     <div className="order-rx-block">
       <p className="order-detail-main">
         {item.productName}
-        {sameForBoth && (
-          <span className="order-detail-small">
-            {" "}· Same power for both eyes
-          </span>
-        )}
+        {sameForBoth && <span className="order-detail-small"> · Same power for both eyes</span>}
       </p>
-
       <table className="admin-table order-items-table">
-        <thead>
-          <tr>
-            <th scope="col">Power</th>
-            <th scope="col">Right eye</th>
-            {!sameForBoth && (
-              <th scope="col">Left eye</th>
-            )}
-          </tr>
-        </thead>
-
-        <tbody>
-          {fields.map((field) => (
-            <tr key={field.key}>
-              <td>{field.label}</td>
-              <td>{rx.right?.[field.key] || "–"}</td>
-              {!sameForBoth && (
-                <td>{rx.left?.[field.key] || "–"}</td>
-              )}
-            </tr>
-          ))}
-        </tbody>
+        <thead><tr><th scope="col">Power</th><th scope="col">Right eye</th>{!sameForBoth && <th scope="col">Left eye</th>}</tr></thead>
+        <tbody>{fields.map((field) => (
+          <tr key={field.key}><td>{field.label}</td><td>{rx.right?.[field.key] || "–"}</td>{!sameForBoth && <td>{rx.left?.[field.key] || "–"}</td>}</tr>
+        ))}</tbody>
       </table>
     </div>
   );
 }
-
 
 function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   const { busyId, error: statusError, update } = useStatusUpdater({
@@ -2990,7 +2952,7 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
 
             {items.length === 0 && <p className="od-muted">No items recorded for this order.</p>}
             {items.map((item) => (
-              <PrescriptionBlock key={item.id ?? `${item.productId}-rx`} item={item} />
+              <PrescriptionBlock key={item.id ?? `${item.productId}-rx`} item={item} api={api} orderId={order.id} />
             ))}
           </section>
 
