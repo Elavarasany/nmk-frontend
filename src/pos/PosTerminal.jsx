@@ -160,7 +160,7 @@ function WebhookReviewPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const loadQueue = useCallback(async (nextPage = page) => {
+  const loadQueue = useCallback(async (nextPage = 0) => {
     setLoading(true);
     setError("");
     try {
@@ -172,9 +172,9 @@ function WebhookReviewPanel() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, []);
 
-  useEffect(() => { loadQueue(0); }, []);
+  useEffect(() => { loadQueue(0); }, [loadQueue]);
 
   return (
     <section className="pos-history-panel pos-webhook-review">
