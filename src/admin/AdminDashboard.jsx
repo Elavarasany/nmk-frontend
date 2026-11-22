@@ -5311,7 +5311,7 @@ function AdminAuditLogPage({ api }) {
         </div>
       </div>
       <p className="admin-help-text" style={{ marginTop: 14 }}>
-        Hash-chain verification and append-only database triggers require manual backend migration 016 before deployment. A database administrator could still alter both the events and chain state; external backups and restricted database access remain necessary. Requests rejected before the MVC layer are not all captured.
+        Hash-chain verification and append-only database triggers require manual backend migration 016 before deployment. Rejected admin mutations returning 401 or 403 are also recorded at the security layer. Upstream proxy failures and some pre-security failures may not be captured. A database administrator could still alter both the events and chain state; external backups and restricted database access remain necessary.
       </p>
     </section>
   );
