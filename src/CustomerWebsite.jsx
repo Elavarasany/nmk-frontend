@@ -2520,6 +2520,12 @@ export default function CustomerWebsite() {
   // DATA
   const [products, setProducts] = useState([]);
   const [productsReady, setProductsReady] = useState(false);
+  const [productsPage, setProductsPage] = useState(0);
+  const [productsHasNext, setProductsHasNext] = useState(false);
+  const [loadingMoreProducts, setLoadingMoreProducts] = useState(false);
+  const [cartReferenceProducts, setCartReferenceProducts] = useState([]);
+  const [cartUnavailableProductIds, setCartUnavailableProductIds] = useState([]);
+  const [cartReferencesReady, setCartReferencesReady] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
   const [productReloadKey, setProductReloadKey] = useState(0);
