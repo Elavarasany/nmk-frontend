@@ -1560,6 +1560,7 @@ export default function PosTerminal() {
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [procurementCostReport, setProcurementCostReport] = useState(null);
   const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
+  const [procurementCostReportMoreLoading, setProcurementCostReportMoreLoading] = useState(false);
   const procurementCostReportRequestRef = useRef(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1920,10 +1921,37 @@ export default function PosTerminal() {
     }
   }, [locationId, reportFrom, reportTo]);
 
+  const loadMoreProcurementCostReportEntries = useCallback(async () => {
+    if (!procurementCostReport?.entriesHasNext || procurementCostReportMoreLoading) return;
+    const requestId = procurementCostReportRequestRef.current;
+    const nextPage = (procurementCostReport.entriesPage || 0) + 1;
+    setProcurementCostReportMoreLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest("/admin/procurement/cost-report/entries?locationId=" + encodeURIComponent(locationId)
+        + "&from=" + encodeURIComponent(reportFrom) + "&to=" + encodeURIComponent(reportTo)
+        + "&page=" + nextPage + "&size=50");
+      if (requestId === procurementCostReportRequestRef.current) {
+        setProcurementCostReport((current) => current ? {
+          ...current,
+          entries: [...(current.entries || []), ...(data.content || [])],
+          entriesPage: data.number ?? nextPage,
+          entriesSize: data.size ?? 50,
+          entriesHasNext: Boolean(data.last === false || data.hasNext === true)
+        } : current);
+      }
+    } catch (err) {
+      if (requestId === procurementCostReportRequestRef.current) setError(err.message);
+    } finally {
+      if (requestId === procurementCostReportRequestRef.current) setProcurementCostReportMoreLoading(false);
+    }
+  }, [locationId, reportFrom, reportTo, procurementCostReport, procurementCostReportMoreLoading]);
+
   const invalidateProcurementCostReport = () => {
     procurementCostReportRequestRef.current += 1;
     setProcurementCostReport(null);
     setProcurementCostReportLoading(false);
+    setProcurementCostReportMoreLoading(false);
   };
 
   const openVoidDialog = (sale) => {
@@ -3075,6 +3103,16 @@ export default function PosTerminal() {
                         <td>{row.quantity}</td><td>{money(row.unitCost)}</td><td><strong>{money(row.totalCost)}</strong></td><td>{row.recordedBy}</td><td>{row.createdAt ? new Date(row.createdAt).toLocaleString("en-IN") : "—"}</td>
                       </tr>)}</tbody>
                     </table></div>
+                    <div className="pos-history-pagination">
+                      <span>Showing {(procurementCostReport.entries || []).length} of {procurementCostReport.totalEntries || 0} cost entries</span>
+                      {procurementCostReport.entriesHasNext && (
+                        <button type="button" className="pos-button secondary compact"
+                          onClick={loadMoreProcurementCostReportEntries}
+                          disabled={procurementCostReportMoreLoading}>
+                          {procurementCostReportMoreLoading ? "Loading…" : "Load more entries"}
+                        </button>
+                      )}
+                    </div>
                   </>}
             </section>
           </section>
