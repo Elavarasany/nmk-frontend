@@ -911,10 +911,14 @@ function useAdminApi(token, onSessionEnded) {
       method,
       payload,
       fallbackMessage,
+      authorizationToken,
     }) => {
       const response = await authFetch(url, {
         method,
-        headers: JSON_HEADERS,
+        headers: {
+          ...JSON_HEADERS,
+          ...(authorizationToken ? { "X-Admin-Action-Authorization": authorizationToken } : {}),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -925,6 +929,27 @@ function useAdminApi(token, onSessionEnded) {
       }
 
       return true;
+    };
+
+    const postJson = async (url, payload, authorizationToken, fallbackMessage) => {
+      const response = await authFetch(url, {
+        method: "POST",
+        headers: {
+          ...JSON_HEADERS,
+          ...(authorizationToken ? { "X-Admin-Action-Authorization": authorizationToken } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response) return null;
+      let data = {};
+      try { data = await response.json(); } catch { /* empty provider response */ }
+      if (!response.ok) {
+        const error = new Error(data.message || fallbackMessage || "Request failed.");
+        error.status = response.status;
+        throw error;
+      }
+      return data;
     };
 
     const deleteRecord = async (
@@ -1015,6 +1040,7 @@ function useAdminApi(token, onSessionEnded) {
 
     return {
       saveRecord,
+      postJson,
       deleteRecord,
       getJson,
       verifyPassword,
@@ -2659,6 +2685,215 @@ function PrescriptionBlock({ item, api, orderId }) {
   );
 }
 
+function OnlineRefundPanel({ order, api, onNotice, onReload }) {
+  const [refunds, setRefunds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
+  const [retryKey, setRetryKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadRefunds = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.orders}/${order.id}/refunds`,
+        "Unable to load refund history"
+      );
+      const rows = Array.isArray(data) ? data : [];
+      setRefunds(rows);
+      setLoadError("");
+      const unresolved = rows.find((refund) =>
+        refund.status === "PENDING" && !refund.razorpayRefundId && refund.requestIdempotencyKey
+      );
+      if (unresolved) {
+        setRetryKey(unresolved.requestIdempotencyKey);
+        setAmount((Number(unresolved.amountPaise) / 100).toFixed(2));
+        setReason(unresolved.reason || "");
+      } else {
+        setRetryKey("");
+      }
+    } catch (err) {
+      setLoadError(err.message || "Unable to load refund history");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson, order.id]);
+
+  useEffect(() => {
+    loadRefunds();
+  }, [loadRefunds]);
+
+  const activeRefundPaise = refunds
+    .filter((refund) => ["PENDING", "PROCESSED"].includes(refund.status))
+    .reduce((total, refund) => total + Number(refund.amountPaise || 0), 0);
+  const totalPaise = Math.round(Number(order.totalAmount || 0) * 100);
+  const remainingPaise = Math.max(0, totalPaise - activeRefundPaise);
+  const pendingProvider = refunds.some((refund) => refund.status === "PENDING");
+  const canInitiate = order.paymentStatus === "PAID"
+    && remainingPaise >= 100
+    && !pendingProvider
+    && !busy;
+
+  const parseAmountPaise = (value) => {
+    const match = String(value || "").trim().match(/^(\d{1,10})(?:\.(\d{1,2}))?$/);
+    if (!match) return null;
+    const paise = Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
+    return Number.isSafeInteger(paise) ? paise : null;
+  };
+
+  const submitRefund = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+
+    const amountPaise = retryKey ? parseAmountPaise(amount) : parseAmountPaise(amount);
+    if (amountPaise == null || amountPaise < 100 || amountPaise > remainingPaise) {
+      setError("Enter a refund amount of at least ₹1.00 within the remaining refundable balance.");
+      return;
+    }
+    if (!reason.trim() || reason.trim().length > 255) {
+      setError("Enter a reason of up to 255 characters.");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Enter your admin password to authorize this financial action.");
+      return;
+    }
+
+    const idempotencyKey = retryKey || crypto.randomUUID().replace(/-/g, "");
+    setBusy(true);
+    setError("");
+    try {
+      const authorizationToken = await api.authorizeAction(password, "RAZORPAY_REFUND");
+      const result = await api.postJson(
+        `${ENDPOINTS.orders}/${order.id}/refunds`,
+        { amountPaise, reason: reason.trim(), idempotencyKey },
+        authorizationToken,
+        "Unable to initiate Razorpay refund"
+      );
+      if (!result) return;
+
+      setPassword("");
+      setRetryKey(result.retryWithSameKey ? idempotencyKey : "");
+      onNotice(result.message || "Refund request submitted.");
+      await loadRefunds();
+      await onReload();
+    } catch (err) {
+      setError(err.message || "Unable to initiate refund.");
+      if (err.status && err.status >= 400 && err.status < 500 && err.status !== 409) {
+        setRetryKey("");
+      }
+      await loadRefunds();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="od-card" aria-labelledby={`od-${order.id}-refunds`}>
+      <div className="od-section-head">
+        <div>
+          <h3 id={`od-${order.id}-refunds`}>Razorpay refunds</h3>
+          <p className="od-muted">Normal-speed full or partial refunds. Admin password required for every request.</p>
+        </div>
+        <span className="admin-status">{formatINR(remainingPaise / 100, true)} remaining</span>
+      </div>
+
+      {loading ? (
+        <p className="od-muted">Loading refund history…</p>
+      ) : loadError ? (
+        <p className="od-warning" role="alert">{loadError}</p>
+      ) : refunds.length === 0 ? (
+        <p className="od-muted">No Razorpay refunds have been recorded for this order.</p>
+      ) : (
+        <div className="admin-table-scroll">
+          <table className="admin-table od-items-table">
+            <thead>
+              <tr><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Razorpay refund ID</th><th scope="col">Reason</th></tr>
+            </thead>
+            <tbody>
+              {refunds.map((refund) => (
+                <tr key={refund.id}>
+                  <td><span className={`admin-status ${refund.status === "FAILED" ? "inactive" : "available"}`}>{refund.status}</span></td>
+                  <td>{formatINR(Number(refund.amountPaise || 0) / 100, true)}</td>
+                  <td className="od-mono">{refund.razorpayRefundId || "Awaiting provider confirmation"}</td>
+                  <td>{refund.reason || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pendingProvider && !retryKey && (
+        <div className="od-warning" role="note">
+          A refund is still pending at Razorpay. Wait for its webhook status before starting another refund.
+        </div>
+      )}
+
+      {order.paymentStatus !== "PAID" ? (
+        <p className="od-muted">Only orders with a verified captured payment can be refunded.</p>
+      ) : remainingPaise < 100 ? (
+        <p className="od-muted">The full captured amount is already refunded or reserved by pending refunds.</p>
+      ) : (
+        <form className="od-courier-form" onSubmit={submitRefund} noValidate>
+          {retryKey && (
+            <div className="od-warning" role="note">
+              The previous provider response was uncertain. Retry this exact request with the same idempotency key; do not create a new refund request.
+            </div>
+          )}
+          <FormGroup id={`refund-amount-${order.id}`} label="Refund amount (₹)">
+            <input
+              id={`refund-amount-${order.id}`}
+              type="number"
+              min="1"
+              max={(remainingPaise / 100).toFixed(2)}
+              step="0.01"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              disabled={!canInitiate || Boolean(retryKey)}
+            />
+          </FormGroup>
+          <FormGroup id={`refund-reason-${order.id}`} label="Reason">
+            <input
+              id={`refund-reason-${order.id}`}
+              type="text"
+              maxLength={255}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Reason for refund"
+              disabled={!canInitiate || Boolean(retryKey)}
+            />
+          </FormGroup>
+          <FormGroup id={`refund-password-${order.id}`} label="Admin password">
+            <input
+              id={`refund-password-${order.id}`}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Re-enter admin password"
+              disabled={busy}
+            />
+          </FormGroup>
+          <ErrorMessage>{error}</ErrorMessage>
+          <div className="od-actions-right">
+            <button type="submit" className="od-primary-btn" disabled={(!canInitiate && !retryKey) || busy}>
+              {busy ? "Submitting…" : retryKey ? "Retry same refund request" : "Initiate normal refund"}
+            </button>
+          </div>
+          <p className="od-muted">
+            Refunds do not automatically cancel the order or restore stock. Reconcile inventory separately after the refund is confirmed.
+          </p>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   const { busyId, error: statusError, update } = useStatusUpdater({
     api,
@@ -2838,6 +3073,8 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
             </dl>
           </section>
         </div>
+
+        <OnlineRefundPanel order={order} api={api} onNotice={onNotice} onReload={onReload} />
 
         <section className="od-card" aria-labelledby={`od-${order.id}-items`}>
           <div className="od-section-head">
