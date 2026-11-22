@@ -31,7 +31,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 
 ## Cashier checkout
 
-- [ ] Sign in as CASHIER and open the available MAIN register shift with a counted opening float. Register-to-staff assignment is not implemented; this check does not validate register assignment controls.
+- [ ] Sign in as CASHIER and open the available MAIN register shift with a counted opening float. Register-to-staff assignment is not implemented; any authorized POS staff can open any active register, and the same employee can open shifts on multiple registers. Confirm owner policy before production.
 - [ ] Search by product name, SKU and barcode; select the intended variant and verify the displayed available quantity.
 - [ ] Complete a cash sale where tendered cash exceeds the amount due. Verify change is correct and expected drawer cash increases by the payment amount, not by tendered cash.
 - [ ] Print the POS receipt (not a statutory GST invoice), reload the page, find the sale in history and reprint it.
@@ -55,7 +55,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 - [ ] For a cash refund, verify expected drawer cash decreases by the refund amount. For UPI/card, verify the POS records the reference only and that the refund was independently completed and confirmed through the provider.
 - [ ] Complete an exchange with a positive balance due and one with a negative balance due. Verify only the positive difference is collected and the negative difference is recorded as a refund; verify stock dispositions and audit history. Confirm fresh action-specific password authorization is consumed once. Current control is self-approval; obtain owner policy for value thresholds, dual approval and evidence before production.
 - [ ] Record cash-in and cash-out with reasons. Attempt cash-out greater than expected drawer cash; it must be rejected. Verify actor and reason are retained. Current behavior has no amount ceiling or fresh supervisor approval for cash-in/out; obtain owner-approved limits and approval policy before production.
-- [ ] Close the shift using a counted cash amount. A variance must require an explanation and remain visible in manager review.
+- [ ] Close the shift using a counted cash amount. A variance must require an explanation and remain visible in manager review. Confirm the owner-approved procedure for independent cash count verification; the current system does not enforce a second counter.
 
 ## Manager inventory and procurement
 
@@ -84,7 +84,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 
 ## Current release-gate count
 
-There are 43 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 41 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
+There are 44 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 44 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
 
 ## Known limitations
 
