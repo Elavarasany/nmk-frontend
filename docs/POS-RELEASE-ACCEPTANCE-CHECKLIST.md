@@ -54,7 +54,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 - [ ] Attempt to void a sale after a partial return. It must be rejected.
 - [ ] For a cash refund, verify expected drawer cash decreases by the refund amount. For UPI/card, verify the POS records the reference only and that the refund was independently completed and confirmed through the provider.
 - [ ] Complete an exchange with a positive balance due and one with a negative balance due. Verify only the positive difference is collected and the negative difference is recorded as a refund; verify stock dispositions and audit history.
-- [ ] Record cash-in and cash-out with reasons. Attempt cash-out greater than expected drawer cash; it must be rejected.
+- [ ] Record cash-in and cash-out with reasons. Attempt cash-out greater than expected drawer cash; it must be rejected. Verify actor and reason are retained. Current behavior has no amount ceiling or fresh supervisor approval for cash-in/out; obtain owner-approved limits and approval policy before production.
 - [ ] Close the shift using a counted cash amount. A variance must require an explanation and remain visible in manager review.
 
 ## Manager inventory and procurement
@@ -84,7 +84,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 
 ## Current release-gate count
 
-There are 41 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 41 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
+There are 42 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 41 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
 
 ## Known limitations
 
