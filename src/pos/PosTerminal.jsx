@@ -159,6 +159,25 @@ function WebhookReviewPanel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [providerReview, setProviderReview] = useState(null);
+  const [providerReviewOrderId, setProviderReviewOrderId] = useState(null);
+  const [providerLoadingOrderId, setProviderLoadingOrderId] = useState(null);
+  const [providerError, setProviderError] = useState("");
+
+  const loadProviderStatus = async (localOrderId) => {
+    setProviderLoadingOrderId(localOrderId);
+    setProviderError("");
+    setProviderReview(null);
+    setProviderReviewOrderId(localOrderId);
+    try {
+      const result = await apiRequest("/admin/pos/payments/stale-creation-review/" + localOrderId + "/provider-status");
+      setProviderReview(result);
+    } catch (err) {
+      setProviderError(err.message || "Unable to verify Razorpay status.");
+    } finally {
+      setProviderLoadingOrderId(null);
+    }
+  };
 
   const loadQueue = useCallback(async (nextPage = 0) => {
     setLoading(true);
@@ -274,7 +293,7 @@ function StalePaymentCreationReviewPanel() {
             <div className="pos-webhook-summary"><strong>{data.totalElements || 0} order(s) awaiting review</strong><span>Oldest orders first · Page {data.totalPages ? page + 1 : 0} of {data.totalPages || 0}</span></div>
             <div className="pos-history-table-wrap">
               <table className="pos-history-table">
-                <thead><tr><th>Order / created</th><th>Razorpay order</th><th>Amount</th><th>Payment / order status</th><th>Stock reservation</th><th>Age / expiry</th></tr></thead>
+                <thead><tr><th>Order / created</th><th>Razorpay order</th><th>Amount</th><th>Payment / order status</th><th>Stock reservation</th><th>Age / expiry</th><th>Provider check</th></tr></thead>
                 <tbody>{data.content.map((item) => (
                   <tr key={item.orderId}>
                     <td><strong>#{item.orderId}</strong><small>{item.orderDate ? new Date(item.orderDate).toLocaleString("en-IN") : "—"}</small></td>
@@ -283,10 +302,41 @@ function StalePaymentCreationReviewPanel() {
                     <td><strong>{item.paymentCreationStatus}</strong><small>{item.paymentStatus} · {item.orderStatus}</small></td>
                     <td><strong>{item.stockReserved ? "Reserved" : "Not reserved"}</strong><small>Location: {item.inventoryLocationId ?? "—"}</small></td>
                     <td><strong>{item.ageMinutes} min</strong><small>Expires: {item.reservationExpiresAt ? new Date(item.reservationExpiresAt).toLocaleString("en-IN") : "—"}</small></td>
+                    <td><button type="button" className="pos-button secondary compact" onClick={() => loadProviderStatus(item.orderId)} disabled={providerLoadingOrderId === item.orderId || !item.razorpayOrderId}>{providerLoadingOrderId === item.orderId ? "Checking…" : "Check Razorpay"}</button></td>
                   </tr>
                 ))}</tbody>
               </table>
             </div>
+            {providerReviewOrderId && (
+              <div className="pos-webhook-detail">
+                <div className="pos-panel-heading">
+                  <div><h3>Razorpay provider status · Local order #{providerReviewOrderId}</h3><p>Checked {providerReview?.checkedAt ? new Date(providerReview.checkedAt).toLocaleString("en-IN") : "—"}</p></div>
+                  <button type="button" className="pos-button secondary compact" onClick={() => { setProviderReview(null); setProviderReviewOrderId(null); setProviderError(""); }}>Close</button>
+                </div>
+                {providerLoadingOrderId === providerReviewOrderId && <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Fetching Razorpay order and payment attempts…</span></div>}
+                {providerError && <div className="pos-alert error" role="alert"><AlertCircle size={17} /><span>{providerError}</span></div>}
+                {providerReview && <>
+                  <div className="pos-webhook-warning"><AlertCircle size={17} /><span>{providerReview.reviewWarning}</span></div>
+                  <div className="pos-webhook-summary">
+                    <strong>Provider order: {providerReview.providerOrderStatus || "Unknown"}</strong>
+                    <span>Attempts: {providerReview.providerAttempts ?? "—"} · Currency: {providerReview.providerCurrency || "—"} · Amount matches local: {providerReview.providerAmountMatchesLocal ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="pos-webhook-summary">
+                    <span>Amount: {providerReview.providerAmountPaise == null ? "—" : "₹" + (providerReview.providerAmountPaise / 100).toFixed(2)}</span>
+                    <span>Paid: {providerReview.providerAmountPaidPaise == null ? "—" : "₹" + (providerReview.providerAmountPaidPaise / 100).toFixed(2)}</span>
+                    <span>Due: {providerReview.providerAmountDuePaise == null ? "—" : "₹" + (providerReview.providerAmountDuePaise / 100).toFixed(2)}</span>
+                  </div>
+                  <div className="pos-history-table-wrap">
+                    <table className="pos-history-table">
+                      <thead><tr><th>Payment ID</th><th>Status</th><th>Amount</th><th>Currency</th><th>Captured</th></tr></thead>
+                      <tbody>{(providerReview.paymentAttempts || []).length ? providerReview.paymentAttempts.map((attempt) => (
+                        <tr key={attempt.paymentId}><td>{attempt.paymentId || "—"}</td><td>{attempt.status || "—"}</td><td>{attempt.amountPaise == null ? "—" : "₹" + (attempt.amountPaise / 100).toFixed(2)}</td><td>{attempt.currency || "—"}</td><td>{attempt.captured == null ? "—" : attempt.captured ? "Yes" : "No"}</td></tr>
+                      )) : <tr><td colSpan={5}>No payment attempts returned by Razorpay.</td></tr>}</tbody>
+                    </table>
+                  </div>
+                </>}
+              </div>
+            )}
             <div className="pos-pagination">
               <span>{data.totalElements || 0} total orders</span>
               <div>
