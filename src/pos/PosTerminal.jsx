@@ -2852,8 +2852,8 @@ export default function PosTerminal() {
                     </tbody></table></div>
                   </section>
                   <section className="pos-report-table-section"><h3>Top products</h3>
-                    <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Product</th><th>SKU</th><th>Gross qty sold</th><th>Gross line total</th></tr></thead><tbody>
-                      {(salesReport.topProducts || []).map((row) => <tr key={row.productId}><td>{row.productName}</td><td>{row.sku || "—"}</td><td>{row.quantitySold}</td><td><strong>{money(row.grossLineTotal)}</strong></td></tr>)}
+                    <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Product</th><th>Gross qty sold</th><th>Gross line total</th></tr></thead><tbody>
+                      {(salesReport.topProducts || []).map((row) => <tr key={row.productId}><td>{row.productName}</td><td>{row.quantitySold}</td><td><strong>{money(row.grossLineTotal)}</strong></td></tr>)}
                     </tbody></table></div>
                   </section>
                 </>}
