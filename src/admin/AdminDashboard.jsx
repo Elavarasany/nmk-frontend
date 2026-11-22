@@ -772,6 +772,7 @@ map: (p) => {
       pincode: o.pincode,
       totalAmount: o.totalAmount,
       paymentStatus: o.paymentStatus,
+      refundStatus: o.refundStatus || "NONE",
       orderStatus: o.orderStatus,
     }),
   },
@@ -2846,6 +2847,10 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
             </div>
             <dl className="od-kv">
               <div>
+                <dt>Refund status</dt>
+                <dd>{order.refundStatus || "NONE"}</dd>
+              </div>
+              <div>
                 <dt>Payment ID</dt>
                 <dd className="od-mono">{order.razorpayPaymentId || "Not available"}</dd>
               </div>
@@ -3244,6 +3249,9 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
                         <span className={`admin-status ${paid ? "available" : "inactive"}`}>
                           {order.paymentStatus || "PENDING"}
                         </span>
+                        {order.refundStatus && order.refundStatus !== "NONE" && (
+                          <small className="order-cell-sub">Refund: {order.refundStatus}</small>
+                        )}
                       </td>
 
                       <td data-label="Status">
