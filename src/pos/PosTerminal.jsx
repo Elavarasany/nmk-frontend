@@ -1686,6 +1686,13 @@ export default function PosTerminal() {
   const [shiftHistoryHasMore, setShiftHistoryHasMore] = useState(false);
   const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
   const [shiftHistoryMoreLoading, setShiftHistoryMoreLoading] = useState(false);
+  const [cashReconciliationDate, setCashReconciliationDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
+  const [cashReconciliation, setCashReconciliation] = useState(null);
+  const [cashReconciliationLoading, setCashReconciliationLoading] = useState(false);
+  const cashReconciliationRequestRef = useRef(0);
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [inventoryReportMoreLoading, setInventoryReportMoreLoading] = useState(false);
   const inventoryReportRequestRef = useRef(0);
@@ -2011,6 +2018,24 @@ export default function PosTerminal() {
     finally { setShiftHistoryLoading(false); }
   }, [locationId]);
 
+  const loadDailyCashReconciliation = useCallback(async () => {
+    if (!locationId || !cashReconciliationDate) return;
+    const requestId = ++cashReconciliationRequestRef.current;
+    const requestedLocationId = String(locationId);
+    setCashReconciliationLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(`/admin/pos/reports/cash-reconciliation?locationId=${encodeURIComponent(locationId)}&date=${encodeURIComponent(cashReconciliationDate)}`);
+      if (requestId === cashReconciliationRequestRef.current && requestedLocationId === String(locationId)) {
+        setCashReconciliation(data);
+      }
+    } catch (err) {
+      if (requestId === cashReconciliationRequestRef.current) setError(err.message);
+    } finally {
+      if (requestId === cashReconciliationRequestRef.current) setCashReconciliationLoading(false);
+    }
+  }, [locationId, cashReconciliationDate]);
+
   const loadMoreShiftHistory = async () => {
     if (!locationId || !shiftHistoryHasMore || shiftHistoryMoreLoading) return;
     setShiftHistoryMoreLoading(true);
@@ -2309,7 +2334,12 @@ export default function PosTerminal() {
   useEffect(() => { if (activeTab === "history") loadHistory(0); }, [activeTab, loadHistory]);
   useEffect(() => { if (activeTab === "reports") loadSalesReport(); }, [activeTab, loadSalesReport]);
   useEffect(() => { if (activeTab === "inventory-report") loadInventoryReport(); }, [activeTab, loadInventoryReport]);
-  useEffect(() => { if (activeTab === "shift-history") loadShiftHistory(); }, [activeTab, loadShiftHistory]);
+  useEffect(() => {
+    if (activeTab === "shift-history") {
+      loadShiftHistory();
+      loadDailyCashReconciliation();
+    }
+  }, [activeTab, loadShiftHistory, loadDailyCashReconciliation]);
 
   const categories = useMemo(() => ["All", ...new Set(catalog.map((p) => p.category).filter(Boolean))], [catalog]);
   const filteredProducts = useMemo(() => {
@@ -3134,11 +3164,42 @@ export default function PosTerminal() {
         ) : activeTab === "shift-history" ? (
           <section className="pos-history-panel pos-report-panel">
             <div className="pos-panel-heading">
-              <div><h2>Register shift reconciliation</h2><p>Recent 100 shifts for this location, including opening float, expected drawer cash, counted cash and variance. Managers and administrators only.</p></div>
-              <button type="button" className="pos-button secondary compact" onClick={loadShiftHistory} disabled={shiftHistoryLoading}>
-                <RefreshCw size={15} className={shiftHistoryLoading ? "pos-spin" : ""} /> Refresh
-              </button>
+              <div><h2>Register shift reconciliation</h2><p>Daily cash totals are recalculated from the append-only drawer movement ledger. Managers and administrators only.</p></div>
+              <div className="pos-cash-reconciliation-filter">
+                <label>Business date
+                  <input type="date" value={cashReconciliationDate} onChange={(event) => setCashReconciliationDate(event.target.value)} />
+                </label>
+                <button type="button" className="pos-button secondary compact" onClick={() => { loadShiftHistory(); loadDailyCashReconciliation(); }} disabled={shiftHistoryLoading || cashReconciliationLoading}>
+                  <RefreshCw size={15} className={shiftHistoryLoading || cashReconciliationLoading ? "pos-spin" : ""} /> Refresh
+                </button>
+              </div>
             </div>
+            {cashReconciliationLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Recalculating daily cash reconciliation…</span></div>
+              : cashReconciliation ? <>
+                <div className="pos-report-summary">
+                  <article><span>Shifts</span><strong>{cashReconciliation.shiftCount}</strong></article>
+                  <article><span>Expected drawer cash</span><strong>{money(cashReconciliation.expectedCashTotal)}</strong></article>
+                  <article><span>Counted cash · closed shifts</span><strong>{money(cashReconciliation.countedCashTotal)}</strong></article>
+                  <article><span>Net cash variance</span><strong>{money(cashReconciliation.varianceTotal)}</strong></article>
+                  <article><span>Open / closed</span><strong>{cashReconciliation.openShiftCount} / {cashReconciliation.closedShiftCount}</strong></article>
+                  <article><span>Shifts needing review</span><strong>{cashReconciliation.discrepancyCount}</strong></article>
+                </div>
+                <p className="pos-report-note">Expected cash is recomputed from opening float, cash tenders, cash-in, cash-out and cash refunds. Open shifts have no counted cash yet. A ledger consistency mismatch or non-zero closing variance requires review.</p>
+                {!cashReconciliation.shifts?.length && <div className="pos-empty-state"><Clock3 /><span>No shifts opened on this business date.</span></div>}
+                {!!cashReconciliation.shifts?.length && <div className="pos-history-table-wrap"><table className="pos-history-table">
+                  <thead><tr><th>Register / shift</th><th>Cashier</th><th>Opened / closed</th><th>Expected from ledger</th><th>Recorded expected</th><th>Counted</th><th>Recalculated variance</th><th>Ledger check</th></tr></thead>
+                  <tbody>{cashReconciliation.shifts.map((row) => <tr key={row.shiftId}>
+                    <td><strong>{row.registerCode}</strong><small>Shift #{row.shiftId}</small></td>
+                    <td>{row.cashierUsername}</td>
+                    <td>{row.openedAt ? new Date(row.openedAt).toLocaleString("en-IN") : "—"}<small>{row.closedAt ? new Date(row.closedAt).toLocaleString("en-IN") : "Still open"}</small></td>
+                    <td>{money(row.ledgerExpectedCash)}</td>
+                    <td>{row.recordedExpectedCash == null ? "—" : money(row.recordedExpectedCash)}</td>
+                    <td>{row.countedCash == null ? "—" : money(row.countedCash)}</td>
+                    <td><strong>{row.calculatedVariance == null ? "—" : money(row.calculatedVariance)}</strong></td>
+                    <td><span className={row.ledgerConsistent && (row.calculatedVariance == null || Number(row.calculatedVariance) === 0) ? "pos-stock-status healthy" : "pos-stock-status low"}>{!row.ledgerConsistent ? "Ledger mismatch" : row.calculatedVariance != null && Number(row.calculatedVariance) !== 0 ? "Variance" : row.status}</span><small>{row.closingReason || "—"}</small></td>
+                  </tr>)}</tbody>
+                </table></div>}
+              </> : <div className="pos-empty-state"><Clock3 /><span>Choose a business date and refresh to calculate drawer totals.</span></div>}
             {shiftHistoryLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading register shifts…</span></div>
               : !shiftHistory.length ? <div className="pos-empty-state"><Clock3 /><strong>No shifts recorded</strong><span>Register opening and closing reconciliations will appear here.</span></div>
                 : <div className="pos-history-table-wrap"><table className="pos-history-table">
