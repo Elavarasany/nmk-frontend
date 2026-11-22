@@ -2702,7 +2702,7 @@ export default function CustomerWebsite() {
     if (!productsReady || !cartReferencesReady) return;
 
     const byId = new Map();
-    [...products, ...cartReferenceProducts].forEach((product) => byId.set(Number(product.id), product));
+    [...cartReferenceProducts, ...products].forEach((product) => byId.set(Number(product.id), product));
     const { items, removed } = reconcileCart(
       cartRef.current,
       [...byId.values()],
