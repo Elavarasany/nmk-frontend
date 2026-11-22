@@ -871,6 +871,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const loadSupplierPayablesAging = useCallback(async () => {
     if (!selectedSupplierId || staffRole !== "ADMIN") { setSupplierPayablesAging(null); return; }
+    setSupplierPayablesAging(null);
     setSupplierPayablesAgingLoading(true);
     try {
       const data = await apiRequest(`/admin/procurement/suppliers/${encodeURIComponent(selectedSupplierId)}/payables-aging`);
