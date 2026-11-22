@@ -5311,7 +5311,7 @@ function AdminAuditLogPage({ api }) {
         </div>
       </div>
       <p className="admin-help-text" style={{ marginTop: 14 }}>
-        The current audit trail records completed admin API mutations and selected request metadata. It does not capture every request rejected before the MVC layer and is not yet tamper-evident or a substitute for external backups.
+        Hash-chain verification and append-only database triggers require manual backend migration 016 before deployment. A database administrator could still alter both the events and chain state; external backups and restricted database access remain necessary. Requests rejected before the MVC layer are not all captured.
       </p>
     </section>
   );
