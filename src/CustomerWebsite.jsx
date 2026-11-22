@@ -2600,24 +2600,63 @@ export default function CustomerWebsite() {
     writeStorage(WISHLIST_KEY, wishlist);
   }, [wishlist]);
 
-  // FETCH PRODUCTS (re-runs when the user presses "Try again")
+  // FETCH FIRST CATALOGUE PAGE AND REFRESH SAVED CART REFERENCES.
+  // Cart lines outside the first page are looked up individually so pagination
+  // never mistakes an unloaded product for a deleted or out-of-stock product.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
     const loadProducts = async () => {
       setLoadingProducts(true);
+      setLoadingMoreProducts(false);
+      setProductsReady(false);
+      setCartReferencesReady(false);
       setProductError("");
+      setProducts([]);
+      setCartReferenceProducts([]);
+      setCartUnavailableProductIds([]);
+      setProductsPage(0);
+      setProductsHasNext(false);
+      setVisibleCount(PAGE_SIZE);
 
       try {
-        const response = await fetch(API_URL, { signal });
+        const response = await fetch(`${API_URL}?page=0&size=24`, { signal });
         if (!response.ok) throw new Error("Failed to fetch products");
 
-        const data = await response.json();
-        if (!Array.isArray(data)) throw new Error("Unexpected product data");
+        const payload = await response.json();
+        const rawProducts = Array.isArray(payload) ? payload : payload?.content;
+        if (!Array.isArray(rawProducts)) throw new Error("Unexpected product data");
 
-        setProducts(data.map(toProduct));
+        const firstPage = rawProducts.map(toProduct);
+        setProducts(firstPage);
+        setProductsPage(Array.isArray(payload) ? 0 : Number(payload.number || 0));
+        setProductsHasNext(Array.isArray(payload) ? false : Boolean(payload.last === false));
+
+        const savedCart = Array.isArray(cartRef.current) ? cartRef.current : [];
+        const cartProductIds = [...new Set(savedCart
+          .map((item) => Number(item?.id))
+          .filter((id) => Number.isInteger(id) && id > 0))];
+        const missingCartProductIds = cartProductIds.filter(
+          (id) => !firstPage.some((product) => Number(product.id) === id)
+        );
+
+        const cartLookups = await Promise.all(missingCartProductIds.map(async (id) => {
+          try {
+            const lookup = await fetch(`${API_URL}/${encodeURIComponent(id)}`, { signal });
+            if (lookup.status === 404) return { id, unavailable: true };
+            if (!lookup.ok) return { id, unavailable: false };
+            return { id, product: toProduct(await lookup.json()), unavailable: false };
+          } catch (lookupError) {
+            if (lookupError.name === "AbortError") throw lookupError;
+            return { id, unavailable: false };
+          }
+        }));
+
+        setCartReferenceProducts(cartLookups.filter((item) => item.product).map((item) => item.product));
+        setCartUnavailableProductIds(cartLookups.filter((item) => item.unavailable).map((item) => item.id));
         setProductsReady(true);
+        setCartReferencesReady(true);
       } catch (error) {
         if (error.name === "AbortError") return;
         console.error("Product API error:", error);
