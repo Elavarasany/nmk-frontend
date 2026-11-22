@@ -3546,7 +3546,7 @@ function AppointmentsPage({ api, appointments, pageInfo, loading, onReload, onLo
    CUSTOMERS
 ========================= */
 
-function CustomersPage({ orders, customers, loading, onReload }) {
+function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadMore }) {
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState(null);
 
@@ -3587,9 +3587,9 @@ function CustomersPage({ orders, customers, loading, onReload }) {
       />
 
       <div className="admin-stats-grid">
-        <StatCard label="Total Customers" value={customers.length} />
-        <StatCard label="Total Customer Orders" value={totals.orders} />
-        <StatCard label="Total Customer Spending" value={formatINR(totals.spent, true)} />
+        <StatCard label="Total Customers" value={pageInfo?.totalElements ?? customers.length} />
+        <StatCard label="Loaded Customer Orders" value={totals.orders} />
+        <StatCard label="Loaded Customer Spending" value={formatINR(totals.spent, true)} />
       </div>
 
       <div className="admin-product-toolbar">
@@ -3599,6 +3599,9 @@ function CustomersPage({ orders, customers, loading, onReload }) {
           value={search}
           onChange={setSearch}
         />
+        <span aria-live="polite">
+          {visibleCustomers.length} shown · {customers.length} loaded of {pageInfo?.totalElements ?? customers.length} customers
+        </span>
       </div>
 
       {loading ? (
@@ -3654,6 +3657,14 @@ function CustomersPage({ orders, customers, loading, onReload }) {
             </table>
           </div>
 
+          {!pageInfo?.last && (
+            <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+              <button type="button" className="admin-secondary-button" disabled={loading} onClick={onLoadMore}>
+                {loading ? "Loading..." : "Load more customers"}
+              </button>
+            </div>
+          )}
+
           {selected && (
             <div className="customer-history">
               <div className="admin-section-header">
@@ -3670,6 +3681,7 @@ function CustomersPage({ orders, customers, loading, onReload }) {
               </div>
 
               <h3>Order History</h3>
+              <p className="admin-help-text">This history includes orders currently loaded in the Orders tab. Load more orders there to include older records.</p>
 
               {selectedOrders.length === 0 ? (
                 <p>No orders found for this customer.</p>
