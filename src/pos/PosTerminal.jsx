@@ -220,6 +220,85 @@ function WebhookReviewPanel() {
   );
 }
 
+function StalePaymentCreationReviewPanel() {
+  const [page, setPage] = useState(0);
+  const [olderThanMinutes, setOlderThanMinutes] = useState(10);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadQueue = useCallback(async (nextPage = 0, threshold = olderThanMinutes) => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiRequest("/admin/pos/payments/stale-creation-review?page=" + nextPage + "&size=25&olderThanMinutes=" + threshold);
+      setData(result);
+      setPage(nextPage);
+    } catch (err) {
+      setError(err.message || "Unable to load stale payment creations.");
+    } finally {
+      setLoading(false);
+    }
+  }, [olderThanMinutes]);
+
+  useEffect(() => { loadQueue(0, olderThanMinutes); }, [loadQueue, olderThanMinutes]);
+
+  return (
+    <section className="pos-history-panel pos-webhook-review">
+      <div className="pos-panel-heading">
+        <div><h2>Stale payment creation review</h2><p>Orders still marked as creating a Razorpay order after the selected age. Review these before taking any recovery action.</p></div>
+        <button type="button" className="pos-button secondary compact" onClick={() => loadQueue(page)} disabled={loading}>
+          <RefreshCw size={15} className={loading ? "pos-spin" : ""} /> Refresh
+        </button>
+      </div>
+      <div className="pos-webhook-warning">
+        <AlertCircle size={17} />
+        <span>Read-only queue. Do not release reserved stock or retry payment creation solely because an order is old. First verify the Razorpay order and all payment attempts in the merchant account.</span>
+      </div>
+      <div className="pos-report-filters">
+        <label>Older than
+          <select value={olderThanMinutes} onChange={(event) => setOlderThanMinutes(Number(event.target.value))}>
+            <option value={5}>5 minutes</option>
+            <option value={10}>10 minutes</option>
+            <option value={15}>15 minutes</option>
+            <option value={30}>30 minutes</option>
+            <option value={60}>1 hour</option>
+            <option value={1440}>24 hours</option>
+          </select>
+        </label>
+      </div>
+      {error && <div className="pos-alert error" role="alert"><AlertCircle size={17} /><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={15} /></button></div>}
+      {loading && !data ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading stale payment creations…</span></div>
+        : !data?.content?.length ? <div className="pos-empty-state"><CheckCircle2 /><strong>No stale payment creations</strong><span>There are no pending payment-creation records older than {olderThanMinutes} minutes.</span></div>
+          : <>
+            <div className="pos-webhook-summary"><strong>{data.totalElements || 0} order(s) awaiting review</strong><span>Oldest orders first · Page {data.totalPages ? page + 1 : 0} of {data.totalPages || 0}</span></div>
+            <div className="pos-history-table-wrap">
+              <table className="pos-history-table">
+                <thead><tr><th>Order / created</th><th>Razorpay order</th><th>Amount</th><th>Payment / order status</th><th>Stock reservation</th><th>Age / expiry</th></tr></thead>
+                <tbody>{data.content.map((item) => (
+                  <tr key={item.orderId}>
+                    <td><strong>#{item.orderId}</strong><small>{item.orderDate ? new Date(item.orderDate).toLocaleString("en-IN") : "—"}</small></td>
+                    <td>{item.razorpayOrderId || "Not recorded"}</td>
+                    <td><strong>{money(item.totalAmount)}</strong></td>
+                    <td><strong>{item.paymentCreationStatus}</strong><small>{item.paymentStatus} · {item.orderStatus}</small></td>
+                    <td><strong>{item.stockReserved ? "Reserved" : "Not reserved"}</strong><small>Location: {item.inventoryLocationId ?? "—"}</small></td>
+                    <td><strong>{item.ageMinutes} min</strong><small>Expires: {item.reservationExpiresAt ? new Date(item.reservationExpiresAt).toLocaleString("en-IN") : "—"}</small></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <div className="pos-pagination">
+              <span>{data.totalElements || 0} total orders</span>
+              <div>
+                <button type="button" disabled={page <= 0 || loading} onClick={() => loadQueue(page - 1)} aria-label="Previous stale payment page"><ChevronLeft size={18} /></button>
+                <button type="button" disabled={page + 1 >= (data.totalPages || 0) || loading} onClick={() => loadQueue(page + 1)} aria-label="Next stale payment page"><ChevronRight size={18} /></button>
+              </div>
+            </div>
+          </>}
+    </section>
+  );
+}
+
 function ProductImage({ src, name }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <div className="pos-product-placeholder"><Package size={28} /></div>;
@@ -2814,6 +2893,7 @@ export default function PosTerminal() {
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "inventory-report" ? "active" : ""}`} onClick={() => setActiveTab("inventory-report")}><ClipboardCheck size={17} /> Stock report</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "shift-history" ? "active" : ""}`} onClick={() => setActiveTab("shift-history")}><Clock3 size={17} /> Shift history</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "payment-review" ? "active" : ""}`} onClick={() => setActiveTab("payment-review")}><AlertCircle size={17} /> Payment exceptions</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "stale-payment-review" ? "active" : ""}`} onClick={() => setActiveTab("stale-payment-review")}><Clock3 size={17} /> Payment creation</button>}
           </div>
         </div>
 
@@ -3069,6 +3149,8 @@ export default function PosTerminal() {
           </section>
         ) : activeTab === "payment-review" ? (
           <WebhookReviewPanel />
+        ) : activeTab === "stale-payment-review" ? (
+          <StalePaymentCreationReviewPanel />
         ) : activeTab === "reports" ? (
           <section className="pos-history-panel pos-report-panel">
             <div className="pos-panel-heading">
