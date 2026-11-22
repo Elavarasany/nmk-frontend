@@ -92,3 +92,5 @@ There are 45 unchecked manual acceptance items in the sections above. Repository
 - The POS does not execute UPI/card refunds or independently verify payment settlement.
 - GST calculations, statutory tax invoice snapshots and financial-year sequential invoice numbering are not implemented.
 - This checklist does not authorize migration or deployment to the client database.
+
+- [ ] Idempotency collision and retention checks: verify same-key/same-payload replay, same-key/different-payload rejection, exchange-generated sale/return prefix collision with caller-supplied checkout keys, cash-movement key collisions across manual and internally generated movements, and confirm no independent deletion of financial idempotency records.
