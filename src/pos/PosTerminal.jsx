@@ -554,6 +554,16 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [supplierPaymentHistoryBillId, setSupplierPaymentHistoryBillId] = useState(null);
   const [supplierPaymentHistory, setSupplierPaymentHistory] = useState([]);
   const [supplierPaymentHistoryLoading, setSupplierPaymentHistoryLoading] = useState(false);
+  const [supplierCreditNoteTarget, setSupplierCreditNoteTarget] = useState(null);
+  const [supplierCreditNoteForm, setSupplierCreditNoteForm] = useState({ creditNoteNumber: "", issueDate: "", amount: "", reason: "", supplierReturnId: "" });
+  const [supplierCreditNotePassword, setSupplierCreditNotePassword] = useState("");
+  const [supplierCreditNoteSaving, setSupplierCreditNoteSaving] = useState(false);
+  const pendingSupplierCreditNoteRecord = useRef(readPendingOperation("nmk.pos.pending-supplier-credit-note.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.billId && payload.creditNoteNumber && payload.amount)));
+  const [supplierCreditNotePayload, setSupplierCreditNotePayload] = useState(pendingSupplierCreditNoteRecord.current);
+  const [supplierCreditNotesBillId, setSupplierCreditNotesBillId] = useState(null);
+  const [supplierCreditNotes, setSupplierCreditNotes] = useState([]);
+  const [supplierCreditNotesLoading, setSupplierCreditNotesLoading] = useState(false);
   const [supplierBillForm, setSupplierBillForm] = useState(() => {
     const today = new Date();
     return { invoiceNumber: "", invoiceDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`, dueDate: "", amount: "", billType: "GOODS", purchaseOrderId: "" };
@@ -698,6 +708,20 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       const data = await apiRequest(`/admin/procurement/suppliers/${encodeURIComponent(selectedSupplierId)}/bills?page=0&size=50`);
       const rows = Array.isArray(data?.content) ? data.content : [];
       setSupplierBills(rows);
+      const pendingCreditNote = pendingSupplierCreditNoteRecord.current;
+      if (pendingCreditNote?.billId && String(pendingCreditNote.supplierId) === String(selectedSupplierId)) {
+        const target = rows.find((bill) => Number(bill.id) === Number(pendingCreditNote.billId));
+        if (target) {
+          setSupplierCreditNoteTarget(target);
+          setSupplierCreditNoteForm({
+            creditNoteNumber: pendingCreditNote.creditNoteNumber || "",
+            issueDate: pendingCreditNote.issueDate || "",
+            amount: String(pendingCreditNote.amount || ""),
+            reason: pendingCreditNote.reason || "",
+            supplierReturnId: pendingCreditNote.supplierReturnId ? String(pendingCreditNote.supplierReturnId) : "",
+          });
+        }
+      }
       const pendingPayment = pendingSupplierPaymentRecord.current;
       if (pendingPayment?.billId && String(pendingPayment.supplierId) === String(selectedSupplierId)) {
         const target = rows.find((bill) => Number(bill.id) === Number(pendingPayment.billId));
@@ -761,6 +785,86 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       }
       onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same bill; its idempotency key is retained." : ""}`);
     } finally { setSupplierBillSaving(false); }
+  };
+
+  const loadSupplierCreditNotes = async (billId) => {
+    setSupplierCreditNotesBillId(billId);
+    setSupplierCreditNotes([]);
+    setSupplierCreditNotesLoading(true);
+    try {
+      const rows = await apiRequest(`/admin/procurement/supplier-bills/${billId}/credit-notes`);
+      setSupplierCreditNotes(Array.isArray(rows) ? rows : []);
+    } catch (err) { onError(err.message); }
+    finally { setSupplierCreditNotesLoading(false); }
+  };
+
+  const beginSupplierCreditNote = (bill) => {
+    const today = new Date();
+    setSupplierCreditNoteTarget(bill);
+    setSupplierCreditNoteForm({
+      creditNoteNumber: "",
+      issueDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`,
+      amount: String(bill.outstandingAmount),
+      reason: "",
+      supplierReturnId: "",
+    });
+    setSupplierCreditNotePassword("");
+    setSupplierCreditNotePayload(null);
+    pendingSupplierCreditNoteRecord.current = null;
+    sessionStorage.removeItem("nmk.pos.pending-supplier-credit-note.v1");
+  };
+
+  const submitSupplierCreditNote = async (event) => {
+    event.preventDefault();
+    if (staffRole !== "ADMIN" || !supplierCreditNoteTarget) { onError("Only an administrator can record supplier credit notes."); return; }
+    let payload = supplierCreditNotePayload;
+    if (!payload) {
+      const amount = Number(supplierCreditNoteForm.amount);
+      if (!supplierCreditNoteForm.creditNoteNumber.trim() || !supplierCreditNoteForm.issueDate || !supplierCreditNoteForm.reason.trim() || !Number.isFinite(amount) || amount <= 0) {
+        onError("Enter the supplier credit note number, date, amount and reason."); return;
+      }
+      payload = {
+        billId: supplierCreditNoteTarget.id,
+        supplierId: supplierCreditNoteTarget.supplierId,
+        creditNoteNumber: supplierCreditNoteForm.creditNoteNumber.trim(),
+        issueDate: supplierCreditNoteForm.issueDate,
+        amount,
+        reason: supplierCreditNoteForm.reason.trim(),
+        supplierReturnId: supplierCreditNoteForm.supplierReturnId ? Number(supplierCreditNoteForm.supplierReturnId) : null,
+        idempotencyKey: newIdempotencyKey(),
+      };
+      pendingSupplierCreditNoteRecord.current = payload;
+      setSupplierCreditNotePayload(payload);
+      savePendingOperation("nmk.pos.pending-supplier-credit-note.v1", payload);
+    }
+    setSupplierCreditNoteSaving(true);
+    setError("");
+    try {
+      const authorizationToken = await authorizePosAction("SUPPLIER_CREDIT_NOTE", supplierCreditNotePassword);
+      const saved = await apiRequest(`/admin/procurement/supplier-bills/${payload.billId}/credit-notes`, {
+        method: "POST",
+        body: JSON.stringify({
+          creditNoteNumber: payload.creditNoteNumber, issueDate: payload.issueDate,
+          amount: payload.amount, reason: payload.reason,
+          supplierReturnId: payload.supplierReturnId, idempotencyKey: payload.idempotencyKey,
+        }),
+        headers: { "X-Admin-Action-Authorization": authorizationToken },
+      });
+      pendingSupplierCreditNoteRecord.current = null;
+      setSupplierCreditNotePayload(null);
+      sessionStorage.removeItem("nmk.pos.pending-supplier-credit-note.v1");
+      setSupplierCreditNoteTarget(null);
+      setSupplierCreditNotePassword("");
+      await loadSupplierBills();
+      onNotice(`Supplier credit note ${saved.creditNoteNumber} recorded for ${money(saved.amount)}.`);
+    } catch (err) {
+      if (err.status === 400 || (err.status === 409 && String(err.message || "").toLowerCase().includes("credit note number"))) {
+        pendingSupplierCreditNoteRecord.current = null;
+        setSupplierCreditNotePayload(null);
+        sessionStorage.removeItem("nmk.pos.pending-supplier-credit-note.v1");
+      }
+      onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same credit note; its idempotency key is retained." : ""}`);
+    } finally { setSupplierCreditNoteSaving(false); }
   };
 
   const loadSupplierPaymentHistory = async (billId) => {
@@ -1311,6 +1415,9 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     if (pendingSupplierPaymentRecord.current?.supplierId) {
       setSelectedSupplierId(String(pendingSupplierPaymentRecord.current.supplierId));
     }
+    if (pendingSupplierCreditNoteRecord.current?.supplierId) {
+      setSelectedSupplierId(String(pendingSupplierCreditNoteRecord.current.supplierId));
+    }
   }, []);
   useEffect(() => { if (selectedSupplierId && staffRole === "ADMIN") loadSupplierBills(); }, [selectedSupplierId, staffRole, loadSupplierBills]);
   useEffect(() => {
@@ -1616,8 +1723,12 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                     <div className="pos-supplier-bill-totals"><span>Bill {money(bill.amount)}</span><span>Paid {money(bill.paidAmount)}</span><strong>Due {money(bill.outstandingAmount)}</strong></div>
                     <div className="pos-procurement-form-actions">
                       <button type="button" className="pos-button secondary compact" onClick={() => loadSupplierPaymentHistory(bill.id)}>Payment history</button>
+                      <button type="button" className="pos-button secondary compact" onClick={() => loadSupplierCreditNotes(bill.id)}>Credit notes</button>
                       {bill.billType === "LANDED_COST" && <button type="button" className="pos-button secondary compact" onClick={() => loadLandedCostAllocations(bill.id)}>View allocations</button>}
-                      {Number(bill.outstandingAmount) > 0 && <button type="button" className="pos-button primary compact" onClick={() => beginSupplierPayment(bill)}>Record payment</button>}
+                      {Number(bill.outstandingAmount) > 0 && <>
+                        <button type="button" className="pos-button secondary compact" onClick={() => beginSupplierCreditNote(bill)}>Record credit note</button>
+                        <button type="button" className="pos-button primary compact" onClick={() => beginSupplierPayment(bill)}>Record payment</button>
+                      </>}
                     </div>
                   </article>)}
               {supplierPaymentHistoryBillId && <div className="pos-supplier-payment-history">
@@ -1632,8 +1743,37 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                     </tr>)}</tbody>
                   </table></div>}
               </div>}
+              {supplierCreditNotesBillId && <div className="pos-supplier-payment-history">
+                <h5>Credit notes · Bill #{supplierCreditNotesBillId}</h5>
+                {supplierCreditNotesLoading ? <p>Loading credit notes…</p> : !supplierCreditNotes.length
+                  ? <p>No credit notes recorded.</p>
+                  : <div className="pos-history-table-wrap"><table className="pos-history-table">
+                    <thead><tr><th>Date</th><th>Credit note</th><th>Amount</th><th>Reason</th><th>Supplier return</th></tr></thead>
+                    <tbody>{supplierCreditNotes.map((note) => <tr key={note.id}>
+                      <td>{note.issueDate}</td><td>{note.creditNoteNumber}</td><td>{money(note.amount)}</td><td>{note.reason}</td><td>{note.supplierReturnNumber || "—"}</td>
+                    </tr>)}</tbody>
+                  </table></div>}
+              </div>}
             </div>
           </div>
+          {supplierCreditNoteTarget && <form className="pos-supplier-payment-form" onSubmit={submitSupplierCreditNote}>
+            <h5>Record supplier credit note · {supplierCreditNoteTarget.invoiceNumber} · Outstanding {money(supplierCreditNoteTarget.outstandingAmount)}</h5>
+            <div className="pos-inventory-fields">
+              <label>Credit note number<input value={supplierCreditNoteForm.creditNoteNumber} onChange={(event) => setSupplierCreditNoteForm((current) => ({ ...current, creditNoteNumber: event.target.value }))} maxLength={100} disabled={Boolean(supplierCreditNotePayload)} required /></label>
+              <label>Issue date<input type="date" value={supplierCreditNoteForm.issueDate} onChange={(event) => setSupplierCreditNoteForm((current) => ({ ...current, issueDate: event.target.value }))} disabled={Boolean(supplierCreditNotePayload)} required /></label>
+              <label>Credit amount (₹)<input type="number" min="0.01" max={supplierCreditNoteTarget.outstandingAmount} step="0.01" value={supplierCreditNoteForm.amount} onChange={(event) => setSupplierCreditNoteForm((current) => ({ ...current, amount: event.target.value }))} disabled={Boolean(supplierCreditNotePayload)} required /></label>
+              <label>Supplier return ID (optional)<input type="number" min="1" value={supplierCreditNoteForm.supplierReturnId} onChange={(event) => setSupplierCreditNoteForm((current) => ({ ...current, supplierReturnId: event.target.value }))} disabled={Boolean(supplierCreditNotePayload)} /></label>
+            </div>
+            <label>Reason<input value={supplierCreditNoteForm.reason} onChange={(event) => setSupplierCreditNoteForm((current) => ({ ...current, reason: event.target.value }))} maxLength={500} disabled={Boolean(supplierCreditNotePayload)} required /></label>
+            <label className="pos-action-password">Administrator password
+              <input type="password" autoComplete="current-password" value={supplierCreditNotePassword} onChange={(event) => setSupplierCreditNotePassword(event.target.value)} disabled={supplierCreditNoteSaving} />
+            </label>
+            <div className="pos-procurement-form-actions">
+              <button type="button" className="pos-button secondary" onClick={() => { setSupplierCreditNoteTarget(null); setSupplierCreditNotePayload(null); pendingSupplierCreditNoteRecord.current = null; sessionStorage.removeItem("nmk.pos.pending-supplier-credit-note.v1"); }} disabled={supplierCreditNoteSaving || Boolean(supplierCreditNotePayload)}>Cancel</button>
+              <button type="submit" className="pos-button primary" disabled={supplierCreditNoteSaving || !supplierCreditNotePassword.trim()}>{supplierCreditNoteSaving ? "Saving…" : supplierCreditNotePayload ? "Retry same credit note" : "Confirm credit note"}</button>
+            </div>
+            {supplierCreditNotePayload && <p className="pos-retry-note">A credit-note request is pending. Retry the exact same details to avoid duplicate credits.</p>}
+          </form>}
           {supplierPaymentTarget && <form className="pos-supplier-payment-form" onSubmit={submitSupplierPayment}>
             <h5>Record payment · {supplierPaymentTarget.invoiceNumber} · Outstanding {money(supplierPaymentTarget.outstandingAmount)}</h5>
             <div className="pos-inventory-fields">
@@ -1660,7 +1800,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <tbody>{landedCostAllocations.map((row) => <tr key={row.id}><td>{row.sku}</td><td>{row.receivedQuantity}</td><td>{money(row.baseGoodsValue)}</td><td>{money(row.allocatedAmount)}</td><td>{money(row.landedUnitCost)}</td></tr>)}</tbody>
             </table></div>}
           </section>}
-          <p className="pos-report-note">Customer accounts receivable is disabled because POS sales must be fully paid. Landed-cost allocations are receipt-level records only; they do not yet update weighted-average inventory valuation or COGS. Supplier credit notes and bank-statement reconciliation are not yet supported.</p>
+          <p className="pos-report-note">Customer accounts receivable is disabled because POS sales must be fully paid. Landed-cost allocations are receipt-level records only; they do not yet update weighted-average inventory valuation or COGS. Supplier credit notes can be recorded against unpaid bill balances; unallocated supplier credits on fully paid bills and bank-statement reconciliation are not yet supported.</p>
         </section>}
         <div className="pos-procurement-orders">
           <div className="pos-panel-heading"><div><h4>Purchase orders</h4><p>Orders for the selected store location.</p></div></div>
