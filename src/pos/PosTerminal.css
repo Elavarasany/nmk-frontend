@@ -818,6 +818,78 @@
 }
 
 
+.pos-supplier-accounting {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #e5e9ef;
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+.pos-supplier-accounting-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+  align-items: start;
+}
+.pos-supplier-accounting h5 {
+  margin: 0 0 12px;
+  color: var(--pos-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.pos-supplier-bills {
+  display: grid;
+  gap: 9px;
+}
+.pos-supplier-bill-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid #e4e9ef;
+  border-radius: 9px;
+  background: #fff;
+}
+.pos-supplier-bill-card > div:first-child,
+.pos-supplier-bill-totals {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pos-supplier-bill-card > div:first-child strong {
+  color: var(--pos-ink);
+  font-size: 12px;
+}
+.pos-supplier-bill-card > div:first-child span,
+.pos-supplier-bill-totals span {
+  color: #718096;
+  font-size: 10px;
+}
+.pos-supplier-bill-totals strong {
+  color: #8a5a14;
+  font-size: 12px;
+}
+.pos-supplier-payment-form,
+.pos-supplier-landed-costs {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e5e9ef;
+  border-radius: 10px;
+  background: #fff;
+}
+.pos-supplier-accounting .pos-procurement-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .pos-supplier-accounting-grid { grid-template-columns: 1fr; }
+  .pos-supplier-bill-card > div:first-child,
+  .pos-supplier-bill-totals { align-items: flex-start; flex-direction: column; }
+}
 .pos-procurement-card { margin-bottom: 18px; }
 .pos-procurement-grid {
   display: grid;
