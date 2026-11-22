@@ -32,6 +32,7 @@ import {
   Clock,
   ShieldCheck,
   History,
+  Landmark,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
@@ -50,6 +51,7 @@ const ENDPOINTS = {
   banners: `${API_BASE_URL}/admin/marketing/banners`,
   offers: `${API_BASE_URL}/admin/marketing/offers`,
   websiteImages: `${API_BASE_URL}/admin/website-images`,
+  settlements: `${API_BASE_URL}/admin/pos/payments/settlements`,
 };
 
 const LIST_SOURCES = {
@@ -85,6 +87,7 @@ const MENU_ITEMS = [
   { name: "POS Terminal", icon: Store },
   { name: "Products", icon: Package },
   { name: "Orders", icon: ShoppingCart },
+  { name: "Payment Settlements", icon: Landmark },
   { name: "Appointments", icon: CalendarDays },
   { name: "Customers", icon: Users },
   { name: "Staff", icon: ShieldCheck },
@@ -2682,6 +2685,278 @@ function PrescriptionBlock({ item, api, orderId }) {
         ))}</tbody>
       </table>
     </div>
+  );
+}
+
+function SettlementReconciliationPage({ api }) {
+  const now = new Date();
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [day, setDay] = useState("");
+  const [settlements, setSettlements] = useState([]);
+  const [pageInfo, setPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, first: true, last: true });
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [entriesPageInfo, setEntriesPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [entriesLoading, setEntriesLoading] = useState(false);
+
+  const loadSettlements = useCallback(async (page = 0) => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}?page=${page}&size=50`,
+        "Unable to load Razorpay settlements"
+      );
+      setSettlements(Array.isArray(data?.content) ? data.content : []);
+      setPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        first: Boolean(data?.first),
+        last: Boolean(data?.last),
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to load Razorpay settlements");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson]);
+
+  useEffect(() => {
+    loadSettlements(0);
+  }, [loadSettlements]);
+
+  const syncSettlements = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setError("");
+    setNotice("");
+    try {
+      const params = new URLSearchParams({ year, month });
+      if (day) params.set("day", day);
+      const result = await api.postJson(
+        `${ENDPOINTS.settlements}/sync?${params.toString()}`,
+        {},
+        null,
+        "Unable to synchronize Razorpay settlements"
+      );
+      if (!result) return;
+      setNotice(result.message || "Razorpay settlement report synchronized.");
+      setSelected(null);
+      setEntries([]);
+      await loadSettlements(0);
+    } catch (err) {
+      setError(err.message || "Unable to synchronize Razorpay settlements");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const viewEntries = async (settlement) => {
+    setSelected(settlement);
+    setEntriesLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}/${settlement.id}/entries?page=0&size=100`,
+        "Unable to load settlement entries"
+      );
+      setEntries(Array.isArray(data?.content) ? data.content : []);
+      setEntriesPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        last: Boolean(data?.last),
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load settlement entries");
+    } finally {
+      setEntriesLoading(false);
+    }
+  };
+
+  const loadMoreEntries = async () => {
+    if (!selected || entriesLoading || entriesPageInfo.last) return;
+    setEntriesLoading(true);
+    try {
+      const nextPage = entriesPageInfo.number + 1;
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}/${selected.id}/entries?page=${nextPage}&size=100`,
+        "Unable to load more settlement entries"
+      );
+      setEntries((current) => [...current, ...(Array.isArray(data?.content) ? data.content : [])]);
+      setEntriesPageInfo({
+        number: Number(data?.number || nextPage),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        last: Boolean(data?.last),
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load more settlement entries");
+    } finally {
+      setEntriesLoading(false);
+    }
+  };
+
+  const statusClass = (status) => {
+    if (status === "PROVIDER_RECONCILED" || status === "MATCHED") return "available";
+    if (status === "FAILED" || status === "REVIEW_REQUIRED" || status === "MISMATCH" || status === "UNMATCHED" || status === "MANUAL_REVIEW") return "inactive";
+    return "pending";
+  };
+
+  return (
+    <section className="admin-page-section">
+      <div className="admin-page-header">
+        <div>
+          <h2>Razorpay settlement reconciliation</h2>
+          <p>Fetch provider settlement reports and match payment/refund rows against NMK orders.</p>
+        </div>
+        <button type="button" className="admin-secondary-button" onClick={() => loadSettlements(0)} disabled={loading || syncing}>
+          <RefreshCw size={16} aria-hidden="true" /> Refresh
+        </button>
+      </div>
+
+      <div className="admin-table-card" style={{ marginBottom: 16 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Synchronize provider report</h3>
+            <p>Choose a month or a single day. The sync is read-only against Razorpay.</p>
+          </div>
+        </div>
+        <div className="admin-form-grid" style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+          <label className="admin-form-field">
+            <span>Year</span>
+            <input type="number" min="2020" max={now.getFullYear()} value={year} onChange={(event) => setYear(event.target.value)} />
+          </label>
+          <label className="admin-form-field">
+            <span>Month</span>
+            <select value={month} onChange={(event) => setMonth(event.target.value)}>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
+                <option key={value} value={value}>{String(value).padStart(2, "0")}</option>
+              ))}
+            </select>
+          </label>
+          <label className="admin-form-field">
+            <span>Day (optional)</span>
+            <input type="number" min="1" max="31" placeholder="Whole month" value={day} onChange={(event) => setDay(event.target.value)} />
+          </label>
+          <div style={{ display: "flex", alignItems: "end" }}>
+            <button type="button" className="admin-primary-button" onClick={syncSettlements} disabled={syncing || loading || !year || !month}>
+              {syncing ? "Synchronizing…" : "Sync Razorpay report"}
+            </button>
+          </div>
+        </div>
+        {notice && <p className="admin-success-message" role="status" style={{ margin: "0 16px 16px" }}>{notice}</p>}
+        {error && <p className="admin-error-message" role="alert" style={{ margin: "0 16px 16px" }}>{error}</p>}
+      </div>
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Settlement batches</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} batches · newest first</p>
+          </div>
+          <span className="admin-help-text">Provider report records only</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Settlement / date</th><th>Provider status</th><th>Net amount</th>
+                <th>Fees</th><th>Tax</th><th>UTR</th><th>Provider reconciliation</th><th>Rows</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={9}>Loading settlement batches…</EmptyRow>
+                : settlements.length === 0 ? <EmptyRow colSpan={9}>No settlement batches imported yet. Synchronize a report above.</EmptyRow>
+                  : settlements.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong>{item.providerSettlementId}</strong>
+                        <div className="admin-help-text">{formatTimestamp(item.providerCreatedAt)}</div>
+                      </td>
+                      <td><span className="admin-status">{item.status}</span></td>
+                      <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.feesPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.taxPaise || 0) / 100, true)}</td>
+                      <td className="od-mono">{item.utr || "—"}</td>
+                      <td><span className={`admin-status ${statusClass(item.reconciliationStatus)}`}>{item.reconciliationStatus}</span></td>
+                      <td>
+                        {Number(item.matchedEntries || 0)} / {Number(item.totalEntries || 0)} matched
+                        {Number(item.unmatchedEntries || 0) + Number(item.manualReviewEntries || 0) + Number(item.pendingEntries || 0) > 0 && (
+                          <div className="admin-help-text">
+                            {Number(item.unmatchedEntries || 0)} unmatched · {Number(item.manualReviewEntries || 0)} review · {Number(item.pendingEntries || 0)} pending
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <button type="button" className="admin-secondary-button" onClick={() => viewEntries(item)}>
+                          View rows
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">Page {pageInfo.totalPages === 0 ? 0 : pageInfo.number + 1} of {pageInfo.totalPages}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.first || pageInfo.number === 0} onClick={() => loadSettlements(pageInfo.number - 1)}>Previous</button>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.last} onClick={() => loadSettlements(pageInfo.number + 1)}>Next</button>
+          </div>
+        </div>
+      </div>
+
+      {selected && (
+        <div className="admin-table-card" style={{ marginTop: 16 }}>
+          <div className="admin-table-heading">
+            <div>
+              <h3>Settlement rows · {selected.providerSettlementId}</h3>
+              <p>{selected.utr || "No UTR returned"} · {entriesPageInfo.totalElements.toLocaleString("en-IN")} provider entries</p>
+            </div>
+            <button type="button" className="admin-secondary-button" onClick={() => { setSelected(null); setEntries([]); }}>Close</button>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Type / entity</th><th>Order / payment</th><th>Amount</th><th>Debit</th><th>Credit</th><th>Fee + tax</th><th>Match</th></tr>
+              </thead>
+              <tbody>
+                {entriesLoading && entries.length === 0 ? <EmptyRow colSpan={7}>Loading settlement rows…</EmptyRow>
+                  : entries.length === 0 ? <EmptyRow colSpan={7}>No entries found for this settlement.</EmptyRow>
+                    : entries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td><strong>{entry.entryType}</strong><div className="admin-help-text od-mono">{entry.providerEntityId}</div></td>
+                        <td><div>{entry.orderId || "—"}</div><div className="admin-help-text od-mono">{entry.paymentId || "—"}</div></td>
+                        <td>{formatINR(Number(entry.amountPaise || 0) / 100, true)}</td>
+                        <td>{formatINR(Number(entry.debitPaise || 0) / 100, true)}</td>
+                        <td>{formatINR(Number(entry.creditPaise || 0) / 100, true)}</td>
+                        <td>{formatINR((Number(entry.feePaise || 0) + Number(entry.taxPaise || 0)) / 100, true)}</td>
+                        <td><span className={`admin-status ${statusClass(entry.matchStatus)}`}>{entry.matchStatus}</span><div className="admin-help-text">{entry.matchMessage}</div></td>
+                      </tr>
+                    ))}
+              </tbody>
+            </table>
+          </div>
+          {!entriesPageInfo.last && (
+            <div style={{ padding: 12, textAlign: "center" }}>
+              <button type="button" className="admin-secondary-button" disabled={entriesLoading} onClick={loadMoreEntries}>
+                {entriesLoading ? "Loading…" : "Load more rows"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        “Provider reconciled” means Razorpay’s settlement totals and payment/refund entries match the local order/refund ledgers. It does not confirm that the UTR credit appears in the shop’s bank statement. Bank-statement matching is a separate step and requires the client’s bank statement format.
+      </p>
+    </section>
   );
 }
 
@@ -5924,6 +6199,8 @@ export default function AdminDashboard() {
             onNotice={setNotice}
           />
         );
+      case "Payment Settlements":
+        return isAdmin ? <SettlementReconciliationPage api={api} /> : null;
       case "Orders":
         return (
           <OrdersPage
@@ -6021,7 +6298,7 @@ export default function AdminDashboard() {
             <div className="admin-menu-label">MAIN MENU</div>
 
             <nav className="admin-navigation" aria-label="Admin">
-              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log"].includes(item.name) || isAdmin).map((item) => {
+              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log", "Payment Settlements"].includes(item.name) || isAdmin).map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.name;
 
