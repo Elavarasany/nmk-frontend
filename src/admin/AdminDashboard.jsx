@@ -3568,8 +3568,6 @@ function CustomersPage({ api, customers, pageInfo, loading, onReload, onLoadMore
   const [historyPageInfo, setHistoryPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
-  const [search, setSearch] = useState("");
-  const [selectedKey, setSelectedKey] = useState(null);
 
   const selected = useMemo(
     () => customers.find((c) => customerKey(c) === selectedKey) ?? null,
