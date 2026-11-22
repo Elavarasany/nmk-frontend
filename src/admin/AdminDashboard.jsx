@@ -1780,7 +1780,7 @@ function SpecField({ field, value, onChange }) {
 }
 
 
-function ProductsPage({ api, products, loading, onReload, onNotice }) {
+function ProductsPage({ api, products, pageInfo, loading, onReload, onLoadMore, onNotice }) {
   const csvInputRef = useRef(null);
 const [importingCsv, setImportingCsv] = useState(false);
   const prefs = usePrefs();
@@ -1999,9 +1999,16 @@ const handleProductCsvImport = async (e) => {
       try {
         const id = row.id?.trim();
 
-        const existingProduct = id
+        let existingProduct = id
           ? products.find((p) => String(p.id) === id)
           : null;
+
+        if (id && !existingProduct) {
+          existingProduct = await api.getJson(
+            `${ENDPOINTS.products}/${encodeURIComponent(id)}`,
+            `Product ID ${id} could not be loaded.`
+          );
+        }
 
         if (id && !existingProduct) {
           throw new Error(`Product ID ${id} does not exist.`);
@@ -2204,7 +2211,7 @@ const handleProductCsvImport = async (e) => {
 
       <div className="admin-product-toolbar">
         <span aria-live="polite">
-          {visibleProducts.length} of {products.length} products
+          {visibleProducts.length} shown · {products.length} loaded of {pageInfo?.totalElements ?? products.length} products
         </span>
       </div>
 
@@ -2300,6 +2307,14 @@ const handleProductCsvImport = async (e) => {
           </table>
         </div>
       </div>
+
+      {!pageInfo?.last && (
+        <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+          <button type="button" className="admin-secondary-button" disabled={loading} onClick={onLoadMore}>
+            {loading ? "Loading..." : "Load more products"}
+          </button>
+        </div>
+      )}
 
       {modal && (
 
