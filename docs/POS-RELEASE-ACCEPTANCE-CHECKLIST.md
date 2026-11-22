@@ -2,6 +2,16 @@
 
 This checklist is for a disposable staging database and a real browser session. It is not a substitute for automated backend tests, provider settlement verification, accountant approval, or a production migration rehearsal.
 
+## Payment exception review screen
+
+- [ ] Sign in as ADMIN and confirm the POS **Payment exceptions** tab loads the manager/admin manual-review queue.
+- [ ] Sign in as MANAGER and confirm the same queue is accessible.
+- [ ] Sign in as CASHIER and confirm the tab is hidden and the API denies direct access.
+- [ ] Confirm an empty queue shows a clear empty state; confirm populated queue shows event ID/type, provider refund/payment IDs, order ID, amount/currency, provider status and processing error.
+- [ ] Confirm pagination and refresh work, and malformed payloads remain visible without exposing raw webhook JSON.
+- [ ] Confirm the screen offers no action to issue a refund, mark a refund successful, retry an event or change review status.
+- [ ] Follow the interim manual procedure in the backend payment reconciliation readiness document and retain approved evidence.
+
 ## Execution status and evidence rules
 
 All unchecked boxes below are **manual release-acceptance checks**. They have not been executed in a real browser against a disposable staging environment as part of repository review. A backend unit/integration test or CI pass is not a substitute for checking the complete cashier workflow, receipt rendering, browser refresh recovery, real staff accounts, or operational sign-off.
