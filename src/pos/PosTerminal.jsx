@@ -3054,8 +3054,8 @@ export default function PosTerminal() {
                 </button>
               </div>
               <div className="pos-report-filters">
-                <label>From<input type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} /></label>
-                <label>To<input type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} /></label>
+                <label>From<input type="date" value={reportFrom} onChange={(event) => { invalidateProcurementCostReport(); setReportFrom(event.target.value); }} /></label>
+                <label>To<input type="date" value={reportTo} onChange={(event) => { invalidateProcurementCostReport(); setReportTo(event.target.value); }} /></label>
                 <button type="button" className="pos-button primary" onClick={loadProcurementCostReport} disabled={procurementCostReportLoading || !reportFrom || !reportTo || reportTo < reportFrom}>Run cost report</button>
               </div>
               {procurementCostReportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Calculating recorded procurement costs…</span></div>
