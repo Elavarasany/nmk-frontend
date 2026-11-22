@@ -5386,6 +5386,7 @@ export default function AdminDashboard() {
   const [appointmentsPageInfo, setAppointmentsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [ordersPageInfo, setOrdersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [customersPageInfo, setCustomersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [productsPageInfo, setProductsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [loading, setLoading] = useState({});
   const [listErrors, setListErrors] = useState({});
 
@@ -5453,7 +5454,8 @@ export default function AdminDashboard() {
       const requestUrl = key === "appointments"
         ? `${url}?page=${page}&size=50`
         : key === "orders" ? `${url}?page=${page}&size=25`
-        : key === "customers" ? `${url}?page=${page}&size=50` : url;
+        : key === "customers" ? `${url}?page=${page}&size=50`
+        : key === "products" ? `${url}?page=${page}&size=50` : url;
 
       setLoading((prev) => ({ ...prev, [key]: true }));
       try {
@@ -5486,6 +5488,17 @@ export default function AdminDashboard() {
             customers: append ? [...prev.customers, ...data.content] : data.content,
           }));
           setCustomersPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "products" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            products: append ? [...prev.products, ...data.content.filter((item) => !prev.products.some((existing) => existing.id === item.id))] : data.content,
+          }));
+          setProductsPageInfo({
             number: Number(data.number || 0),
             totalPages: Number(data.totalPages || 0),
             totalElements: Number(data.totalElements || 0),
@@ -5602,8 +5615,10 @@ export default function AdminDashboard() {
           <ProductsPage
             api={api}
             products={products}
+            pageInfo={productsPageInfo}
             loading={loading.products}
             onReload={reloaders.Products}
+            onLoadMore={() => loadList("products", productsPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
