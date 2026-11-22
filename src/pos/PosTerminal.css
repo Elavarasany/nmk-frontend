@@ -1174,3 +1174,28 @@
 .pos-procurement-cost-report > .pos-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .pos-procurement-cost-report > .pos-panel-heading p { max-width: 760px; }
 .pos-procurement-cost-report .pos-history-table-wrap { margin-top: 14px; }
+
+
+.pos-webhook-review { padding: 20px; }
+.pos-webhook-warning {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; margin: 0 0 16px;
+  border: 1px solid #ead9b9; border-radius: 9px; background: #fcf8f0; color: #765b32;
+  font-size: 11px; line-height: 1.55;
+}
+.pos-webhook-warning svg { flex: 0 0 auto; margin-top: 1px; }
+.pos-webhook-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 0; color: #536176; font-size: 11px;
+}
+.pos-webhook-summary strong { color: var(--pos-navy); }
+.pos-webhook-summary span { color: #8792a0; }
+.pos-webhook-status {
+  display: inline-flex; align-items: center; padding: 4px 7px; border-radius: 6px;
+  background: #fff4e5; color: #946323; font-size: 10px; font-weight: 800;
+}
+.pos-webhook-review .pos-history-table { min-width: 900px; }
+.pos-webhook-review .pos-history-table td small { display: block; max-width: 260px; margin-top: 3px; color: #8b96a5; font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .pos-webhook-summary { align-items: flex-start; flex-direction: column; }
+  .pos-webhook-review { padding: 14px; }
+}
