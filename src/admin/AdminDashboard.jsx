@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   History,
   Landmark,
+  ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
@@ -52,6 +53,7 @@ const ENDPOINTS = {
   offers: `${API_BASE_URL}/admin/marketing/offers`,
   websiteImages: `${API_BASE_URL}/admin/website-images`,
   settlements: `${API_BASE_URL}/admin/pos/payments/settlements`,
+  disputes: `${API_BASE_URL}/admin/pos/payments/disputes`,
 };
 
 const LIST_SOURCES = {
@@ -88,6 +90,7 @@ const MENU_ITEMS = [
   { name: "Products", icon: Package },
   { name: "Orders", icon: ShoppingCart },
   { name: "Payment Settlements", icon: Landmark },
+  { name: "Payment Disputes", icon: ShieldAlert },
   { name: "Appointments", icon: CalendarDays },
   { name: "Customers", icon: Users },
   { name: "Staff", icon: ShieldCheck },
@@ -2955,6 +2958,125 @@ function SettlementReconciliationPage({ api }) {
 
       <p className="admin-help-text" style={{ marginTop: 14 }}>
         “Provider reconciled” means Razorpay’s settlement totals and payment/refund entries match the local order/refund ledgers. It does not confirm that the UTR credit appears in the shop’s bank statement. Bank-statement matching is a separate step and requires the client’s bank statement format.
+      </p>
+    </section>
+  );
+}
+
+function PaymentDisputesPage({ api }) {
+  const [disputes, setDisputes] = useState([]);
+  const [pageInfo, setPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, first: true, last: true });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadDisputes = useCallback(async (page = 0) => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.disputes}?page=${page}&size=50`,
+        "Unable to load Razorpay disputes"
+      );
+      setDisputes(Array.isArray(data?.content) ? data.content : []);
+      setPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        first: Boolean(data?.first),
+        last: Boolean(data?.last),
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to load Razorpay disputes");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson]);
+
+  useEffect(() => {
+    loadDisputes(0);
+  }, [loadDisputes]);
+
+  const statusClass = (status) => {
+    if (status === "WON" || status === "MATCHED") return "available";
+    if (status === "LOST" || status === "ACTION_REQUIRED" || status === "UNMATCHED" || status === "MISMATCH" || status === "MANUAL_REVIEW") return "inactive";
+    return "pending";
+  };
+
+  return (
+    <section className="admin-content">
+      <div className="admin-section-header">
+        <div>
+          <h2>Razorpay payment disputes</h2>
+          <p>Track chargeback status, response deadlines and disputed amounts from signed provider webhooks.</p>
+        </div>
+        <button type="button" className="admin-secondary-button" onClick={() => loadDisputes(0)} disabled={loading}>
+          <RefreshCw size={16} aria-hidden="true" /> Refresh
+        </button>
+      </div>
+
+      {error && <p className="admin-error-message" role="alert">{error}</p>}
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Dispute ledger</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} disputes · response deadlines first</p>
+          </div>
+          <span className="admin-help-text">Webhook-driven · no automatic order or stock changes</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Dispute / payment</th><th>Local order</th><th>Disputed amount</th>
+                <th>Amount deducted</th><th>Reason</th><th>Phase / status</th>
+                <th>Respond by</th><th>Local match</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={8}>Loading disputes…</EmptyRow>
+                : disputes.length === 0 ? <EmptyRow colSpan={8}>No Razorpay disputes received yet.</EmptyRow>
+                  : disputes.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong className="od-mono">{item.providerDisputeId}</strong>
+                        <div className="admin-help-text od-mono">{item.providerPaymentId}</div>
+                      </td>
+                      <td>{item.localOrderId ? `#${item.localOrderId}` : "Unmatched"}</td>
+                      <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.amountDeductedPaise || 0) / 100, true)}</td>
+                      <td>
+                        <strong>{item.reasonCode || "—"}</strong>
+                        <div className="admin-help-text">{item.reasonDescription || "No provider description"}</div>
+                      </td>
+                      <td>
+                        <span className={`admin-status ${statusClass(item.status)}`}>{item.status}</span>
+                        <div className="admin-help-text">{item.phase || "—"}</div>
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {item.respondBy ? formatDateTime(item.respondBy) : "—"}
+                        {item.status === "ACTION_REQUIRED" && <div className="admin-help-text">Action required in Razorpay</div>}
+                      </td>
+                      <td>
+                        <span className={`admin-status ${statusClass(item.matchStatus)}`}>{item.matchStatus}</span>
+                        <div className="admin-help-text">{item.matchMessage}</div>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">Page {pageInfo.totalPages === 0 ? 0 : pageInfo.number + 1} of {pageInfo.totalPages}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.first || pageInfo.number === 0} onClick={() => loadDisputes(pageInfo.number - 1)}>Previous</button>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.last} onClick={() => loadDisputes(pageInfo.number + 1)}>Next</button>
+          </div>
+        </div>
+      </div>
+
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        Dispute status and deadlines are updated from signed Razorpay webhooks. Evidence submission and accept/contest decisions must be handled in Razorpay Dashboard. This screen does not submit evidence, change dispute outcomes, cancel orders or adjust inventory.
       </p>
     </section>
   );
@@ -6201,6 +6323,8 @@ export default function AdminDashboard() {
         );
       case "Payment Settlements":
         return isAdmin ? <SettlementReconciliationPage api={api} /> : null;
+      case "Payment Disputes":
+        return isAdmin ? <PaymentDisputesPage api={api} /> : null;
       case "Orders":
         return (
           <OrdersPage
@@ -6298,7 +6422,7 @@ export default function AdminDashboard() {
             <div className="admin-menu-label">MAIN MENU</div>
 
             <nav className="admin-navigation" aria-label="Admin">
-              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log", "Payment Settlements"].includes(item.name) || isAdmin).map((item) => {
+              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log", "Payment Settlements", "Payment Disputes"].includes(item.name) || isAdmin).map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.name;
 
