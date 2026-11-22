@@ -1199,3 +1199,18 @@
   .pos-webhook-summary { align-items: flex-start; flex-direction: column; }
   .pos-webhook-review { padding: 14px; }
 }
+
+
+/* Read-only Razorpay status details inside the expired payment review queue. */
+.pos-webhook-detail {
+  margin: 18px 0 8px;
+  padding: 16px;
+  border: 1px solid #e3e8ef;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+.pos-webhook-detail .pos-panel-heading { margin-bottom: 12px; }
+.pos-webhook-detail .pos-panel-heading h3 { margin: 0 0 4px; color: var(--pos-navy); font-size: 14px; }
+.pos-webhook-detail .pos-panel-heading p { margin: 0; color: #8792a0; font-size: 10px; }
+.pos-webhook-detail .pos-webhook-summary { flex-wrap: wrap; justify-content: flex-start; gap: 12px 22px; }
+.pos-webhook-detail .pos-history-table { min-width: 580px; }
