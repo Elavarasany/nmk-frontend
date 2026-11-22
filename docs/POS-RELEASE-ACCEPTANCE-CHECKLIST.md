@@ -94,3 +94,5 @@ There are 45 unchecked manual acceptance items in the sections above. Repository
 - This checklist does not authorize migration or deployment to the client database.
 
 - [ ] Idempotency collision and retention checks: verify same-key/same-payload replay, same-key/different-payload rejection, exchange-generated sale/return prefix collision with caller-supplied checkout keys, cash-movement key collisions across manual and internally generated movements, and confirm no independent deletion of financial idempotency records.
+
+- [ ] Location-isolation acceptance: verify checkout/return/exchange reject a shift from another location; verify staff cannot access unassigned locations, sales, registers, shifts or reports once staff-location assignments are introduced; test cross-location sale/register/shift ID substitution and query scoping. Current roles are global and no staff-location assignment exists, so multi-branch isolation is not yet supported.
