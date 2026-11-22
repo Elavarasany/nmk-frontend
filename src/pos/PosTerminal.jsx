@@ -551,6 +551,8 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [supplierBills, setSupplierBills] = useState([]);
   const [supplierBillsLoading, setSupplierBillsLoading] = useState(false);
+  const [supplierPayablesAging, setSupplierPayablesAging] = useState(null);
+  const [supplierPayablesAgingLoading, setSupplierPayablesAgingLoading] = useState(false);
   const [supplierPaymentHistoryBillId, setSupplierPaymentHistoryBillId] = useState(null);
   const [supplierPaymentHistory, setSupplierPaymentHistory] = useState([]);
   const [supplierPaymentHistoryLoading, setSupplierPaymentHistoryLoading] = useState(false);
@@ -866,6 +868,16 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same credit note; its idempotency key is retained." : ""}`);
     } finally { setSupplierCreditNoteSaving(false); }
   };
+
+  const loadSupplierPayablesAging = useCallback(async () => {
+    if (!selectedSupplierId || staffRole !== "ADMIN") { setSupplierPayablesAging(null); return; }
+    setSupplierPayablesAgingLoading(true);
+    try {
+      const data = await apiRequest(`/admin/procurement/suppliers/${encodeURIComponent(selectedSupplierId)}/payables-aging`);
+      setSupplierPayablesAging(data);
+    } catch (err) { onError(err.message); }
+    finally { setSupplierPayablesAgingLoading(false); }
+  }, [selectedSupplierId, staffRole]);
 
   const loadSupplierPaymentHistory = async (billId) => {
     setSupplierPaymentHistoryBillId(billId);
@@ -1419,7 +1431,12 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setSelectedSupplierId(String(pendingSupplierCreditNoteRecord.current.supplierId));
     }
   }, []);
-  useEffect(() => { if (selectedSupplierId && staffRole === "ADMIN") loadSupplierBills(); }, [selectedSupplierId, staffRole, loadSupplierBills]);
+  useEffect(() => {
+    if (selectedSupplierId && staffRole === "ADMIN") {
+      loadSupplierBills();
+      loadSupplierPayablesAging();
+    }
+  }, [selectedSupplierId, staffRole, loadSupplierBills, loadSupplierPayablesAging]);
   useEffect(() => {
     if (!purchaseOrderPayload) return;
     setSelectedSupplierId(String(purchaseOrderPayload.supplierId));
@@ -1684,7 +1701,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
         {staffRole === "ADMIN" && <section className="pos-supplier-accounting">
           <div className="pos-panel-heading"><div><h4>Supplier accounts payable</h4><p>Post supplier invoices, record authorized payments and inspect receipt-level landed-cost allocations.</p></div>
-            <button type="button" className="pos-button secondary compact" onClick={loadSupplierBills} disabled={supplierBillsLoading}><RefreshCw size={14} /> Refresh bills</button>
+            <button type="button" className="pos-button secondary compact" onClick={() => { loadSupplierBills(); loadSupplierPayablesAging(); }} disabled={supplierBillsLoading || supplierPayablesAgingLoading}><RefreshCw size={14} /> Refresh bills</button>
           </div>
           <div className="pos-supplier-accounting-grid">
             <form className="pos-procurement-form" onSubmit={submitSupplierBill}>
@@ -1716,6 +1733,14 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
             </form>
             <div className="pos-supplier-bills">
               <h5>Supplier bills · {suppliers.find((supplier) => String(supplier.id) === String(selectedSupplierId))?.name || "Select a supplier"}</h5>
+              {supplierPayablesAgingLoading ? <p>Calculating AP aging…</p> : supplierPayablesAging && <div className="pos-supplier-aging-summary">
+                <article><span>Total outstanding</span><strong>{money(supplierPayablesAging.totalOutstanding)}</strong><small>{supplierPayablesAging.openBillCount} open bills</small></article>
+                <article><span>Not due</span><strong>{money(supplierPayablesAging.notDue)}</strong></article>
+                <article><span>1–30 days overdue</span><strong>{money(supplierPayablesAging.overdue1To30Days)}</strong></article>
+                <article><span>31–60 days overdue</span><strong>{money(supplierPayablesAging.overdue31To60Days)}</strong></article>
+                <article><span>61–90 days overdue</span><strong>{money(supplierPayablesAging.overdue61To90Days)}</strong></article>
+                <article><span>Over 90 days overdue</span><strong>{money(supplierPayablesAging.overdueOver90Days)}</strong><small>{supplierPayablesAging.overdueBillCount} overdue bills</small></article>
+              </div>}
               {supplierBillsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading supplier bills…</span></div>
                 : !supplierBills.length ? <div className="pos-empty-state"><FileText /><span>No supplier bills recorded for this supplier.</span></div>
                   : supplierBills.map((bill) => <article className="pos-supplier-bill-card" key={bill.id}>
