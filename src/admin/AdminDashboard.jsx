@@ -3100,7 +3100,7 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   );
 }
 
-function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
+function OrdersPage({ api, orders, pageInfo, loading, loadError, onReload, onLoadMore, onNotice }) {
   const [search, setSearch] = useState("");
   const [range, setRange] = useState(EMPTY_RANGE);
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -3187,7 +3187,7 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
         </select>
 
         <span aria-live="polite">
-          {visibleOrders.length} of {orders.length} orders
+          {visibleOrders.length} shown · {orders.length} loaded of {pageInfo?.totalElements ?? orders.length} orders
         </span>
       </div>
 
@@ -3291,6 +3291,19 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
           </table>
         </div>
       </div>
+
+      {!pageInfo?.last && (
+        <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={loading}
+            onClick={onLoadMore}
+          >
+            {loading ? "Loading..." : "Load more orders"}
+          </button>
+        </div>
+      )}
 
       {selectedOrder && (
         <OrderDetailsDialog
