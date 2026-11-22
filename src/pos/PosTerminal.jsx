@@ -302,7 +302,7 @@ function StalePaymentCreationReviewPanel() {
                     <td><strong>{item.paymentCreationStatus}</strong><small>{item.paymentStatus} · {item.orderStatus}</small></td>
                     <td><strong>{item.stockReserved ? "Reserved" : "Not reserved"}</strong><small>Location: {item.inventoryLocationId ?? "—"}</small></td>
                     <td><strong>{item.ageMinutes} min</strong><small>Expires: {item.reservationExpiresAt ? new Date(item.reservationExpiresAt).toLocaleString("en-IN") : "—"}</small></td>
-                    <td><button type="button" className="pos-button secondary compact" onClick={() => loadProviderStatus(item.orderId)} disabled={providerLoadingOrderId === item.orderId || !item.razorpayOrderId}>{providerLoadingOrderId === item.orderId ? "Checking…" : "Check Razorpay"}</button></td>
+                    <td><button type="button" className="pos-button secondary compact" onClick={() => loadProviderStatus(item.orderId)} disabled={providerLoadingOrderId !== null || !item.razorpayOrderId}>{providerLoadingOrderId === item.orderId ? "Checking…" : "Check Razorpay"}</button></td>
                   </tr>
                 ))}</tbody>
               </table>
