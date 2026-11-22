@@ -79,12 +79,12 @@ Do not mark a box complete without recording the date, tester, environment/build
 - [ ] Reconcile sales, discounts, refunds, exchanges, tender totals and shift cash against the underlying transactions.
 - [ ] Confirm refund reports distinguish recorded POS references from provider-confirmed refunds.
 - [ ] Confirm procurement reports are not treated as accounts payable, landed cost, inventory valuation, COGS or profit.
-- [ ] Export test evidence: screenshots, request/response IDs, sale/return/exchange IDs, stock movement IDs, closing cash variance, migration log and CI run links.
+- [ ] Export test evidence: screenshots, request/response IDs, sale/return/exchange IDs, stock movement IDs, closing cash variance, migration log and CI run links. Confirm the audit trail captures the actor, reason, timestamp and resulting record; current POS history is not tamper-evident and does not provide a unified log of denied/failed actions, actor role, IP/device or authorization-to-outcome linkage.
 - [ ] Obtain shop-owner approval for operating procedures and accountant approval for GST/HSN, tax treatment, receipt/invoice numbering and financial reporting before enabling statutory invoicing.
 
 ## Current release-gate count
 
-There are 44 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 44 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
+There are 45 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 45 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
 
 ## Known limitations
 
