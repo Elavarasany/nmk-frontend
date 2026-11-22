@@ -3304,7 +3304,7 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
    APPOINTMENTS
 ========================= */
 
-function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
+function AppointmentsPage({ api, appointments, pageInfo, loading, onReload, onLoadMore, onNotice }) {
   const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -3320,12 +3320,12 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
   });
 
   const counts = useMemo(() => {
-    const result = { total: appointments.length };
+    const result = { total: Number(pageInfo?.totalElements ?? appointments.length) };
     APPOINTMENT_STATUSES.forEach((s) => {
       result[s.value] = appointments.filter((a) => a.status === s.value).length;
     });
     return result;
-  }, [appointments]);
+  }, [appointments, pageInfo?.totalElements]);
 
   const visibleAppointments = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -3384,7 +3384,7 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
       <div className="admin-stats-grid">
         <StatCard label="Total Appointments" value={counts.total} />
         {APPOINTMENT_STATUSES.map((s) => (
-          <StatCard key={s.value} label={s.label} value={counts[s.value]} />
+          <StatCard key={s.value} label={`${s.label} (loaded)`} value={counts[s.value]} />
         ))}
       </div>
 
@@ -3415,7 +3415,7 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
           ))}
         </select>
 
-        <span aria-live="polite">{visibleAppointments.length} appointments displayed</span>
+        <span aria-live="polite">{visibleAppointments.length} shown · {appointments.length} loaded of {pageInfo?.totalElements ?? appointments.length}</span>
       </div>
 
       {loading ? (
@@ -3500,6 +3500,19 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
               </article>
             );
           })}
+        </div>
+      )}
+
+      {!pageInfo?.last && (
+        <div className="admin-load-more">
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={loading}
+            onClick={onLoadMore}
+          >
+            {loading ? "Loading..." : "Load more appointments"}
+          </button>
         </div>
       )}
 
