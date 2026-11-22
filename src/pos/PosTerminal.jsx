@@ -407,6 +407,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
 
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [supplierPage, setSupplierPage] = useState(0);
+  const [supplierHasMore, setSupplierHasMore] = useState(false);
+  const [orderPage, setOrderPage] = useState(0);
+  const [orderHasMore, setOrderHasMore] = useState(false);
+  const [procurementMoreLoading, setProcurementMoreLoading] = useState(false);
   const [procurementLoading, setProcurementLoading] = useState(false);
   const [procurementSaving, setProcurementSaving] = useState(false);
   const [supplierName, setSupplierName] = useState("");
@@ -449,37 +454,86 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
     setProcurementLoading(true);
     try {
       const [supplierData, orderData] = await Promise.all([
-        apiRequest("/admin/procurement/suppliers"),
-        apiRequest("/admin/procurement/purchase-orders"),
+        apiRequest("/admin/procurement/suppliers?page=0&size=50"),
+        apiRequest("/admin/procurement/purchase-orders?page=0&size=25"),
       ]);
-      const supplierList = Array.isArray(supplierData) ? supplierData : [];
+      const supplierList = Array.isArray(supplierData?.content) ? supplierData.content : [];
+      const orderList = Array.isArray(orderData?.content) ? orderData.content : [];
       setSuppliers(supplierList);
+      setSupplierPage(Number(supplierData?.number || 0));
+      setSupplierHasMore(Boolean(supplierData?.hasNext));
       setSelectedSupplierId((current) => current && supplierList.some((supplier) => String(supplier.id) === String(current) && supplier.active)
         ? current : (supplierList.find((supplier) => supplier.active)?.id ? String(supplierList.find((supplier) => supplier.active).id) : ""));
-      setPurchaseOrders(Array.isArray(orderData) ? orderData : []);
+      setPurchaseOrders(orderList);
+      setOrderPage(Number(orderData?.number || 0));
+      setOrderHasMore(Boolean(orderData?.hasNext));
+
       const pendingReceipt = pendingGoodsReceiptRecord.current;
-      if (pendingReceipt && !receivingOrder) {
-        const order = orderData.find((item) => Number(item.id) === pendingReceipt.purchaseOrderId);
-        if (order) {
-          setReceivingOrder(order);
+      const pendingReturn = pendingSupplierReturnRecord.current;
+      const pendingOrderId = pendingReceipt?.purchaseOrderId || pendingReturn?.purchaseOrderId;
+      if (pendingOrderId && !orderList.some((item) => Number(item.id) === pendingOrderId)) {
+        const pendingOrder = await apiRequest("/admin/procurement/purchase-orders/" + pendingOrderId);
+        setPurchaseOrders((current) => [pendingOrder, ...current.filter((item) => Number(item.id) !== pendingOrderId)]);
+        if (pendingReceipt && !receivingOrder) {
+          setReceivingOrder(pendingOrder);
           setGoodsReceiptReason(pendingReceipt.payload.reason);
           setGoodsReceiptQuantities(Object.fromEntries(pendingReceipt.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
           setGoodsReceiptRetry(true);
-        }
-      }
-      const pendingReturn = pendingSupplierReturnRecord.current;
-      if (pendingReturn && !supplierReturnOrder) {
-        const order = orderData.find((item) => Number(item.id) === pendingReturn.purchaseOrderId);
-        if (order) {
-          setSupplierReturnOrder(order);
+        } else if (pendingReturn && !supplierReturnOrder) {
+          setSupplierReturnOrder(pendingOrder);
           setSupplierReturnReason(pendingReturn.payload.reason);
           setSupplierReturnQuantities(Object.fromEntries(pendingReturn.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
           setSupplierReturnRetry(true);
+        }
+      } else {
+        if (pendingReceipt && !receivingOrder) {
+          const order = orderList.find((item) => Number(item.id) === pendingReceipt.purchaseOrderId);
+          if (order) {
+            setReceivingOrder(order);
+            setGoodsReceiptReason(pendingReceipt.payload.reason);
+            setGoodsReceiptQuantities(Object.fromEntries(pendingReceipt.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
+            setGoodsReceiptRetry(true);
+          }
+        }
+        if (pendingReturn && !supplierReturnOrder) {
+          const order = orderList.find((item) => Number(item.id) === pendingReturn.purchaseOrderId);
+          if (order) {
+            setSupplierReturnOrder(order);
+            setSupplierReturnReason(pendingReturn.payload.reason);
+            setSupplierReturnQuantities(Object.fromEntries(pendingReturn.payload.items.map((item) => [item.purchaseOrderItemId, String(item.quantity)])));
+            setSupplierReturnRetry(true);
+          }
         }
       }
     } catch (err) { onError(err.message); }
     finally { setProcurementLoading(false); }
   }, [onError]);
+
+  const loadMoreSuppliers = async () => {
+    if (!supplierHasMore || procurementMoreLoading) return;
+    setProcurementMoreLoading(true);
+    try {
+      const data = await apiRequest("/admin/procurement/suppliers?page=" + (supplierPage + 1) + "&size=50");
+      const content = Array.isArray(data?.content) ? data.content : [];
+      setSuppliers((current) => [...current, ...content.filter((item) => !current.some((existing) => existing.id === item.id))]);
+      setSupplierPage(Number(data?.number || supplierPage + 1));
+      setSupplierHasMore(Boolean(data?.hasNext));
+    } catch (err) { onError(err.message); }
+    finally { setProcurementMoreLoading(false); }
+  };
+
+  const loadMorePurchaseOrders = async () => {
+    if (!orderHasMore || procurementMoreLoading) return;
+    setProcurementMoreLoading(true);
+    try {
+      const data = await apiRequest("/admin/procurement/purchase-orders?page=" + (orderPage + 1) + "&size=25");
+      const content = Array.isArray(data?.content) ? data.content : [];
+      setPurchaseOrders((current) => [...current, ...content.filter((item) => !current.some((existing) => existing.id === item.id))]);
+      setOrderPage(Number(data?.number || orderPage + 1));
+      setOrderHasMore(Boolean(data?.hasNext));
+    } catch (err) { onError(err.message); }
+    finally { setProcurementMoreLoading(false); }
+  };
 
   const createSupplier = async (event) => {
     event.preventDefault();
@@ -1168,6 +1222,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
               <option value="">Choose active supplier</option>
               {suppliers.filter((supplier) => supplier.active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select></label>
+            {supplierHasMore && <button type="button" className="pos-button secondary compact" onClick={loadMoreSuppliers} disabled={procurementMoreLoading || purchaseOrderRetry}>{procurementMoreLoading ? "Loading…" : "Load more suppliers"}</button>}
             <label>Order notes<input value={purchaseOrderNotes} onChange={(event) => setPurchaseOrderNotes(event.target.value)} maxLength={500} placeholder="Optional delivery or reference notes" disabled={purchaseOrderRetry} /></label>
             <div className="pos-po-lines">
               {purchaseOrderItems.map((item, index) => <div className="pos-po-line" key={index}>
@@ -1214,6 +1269,11 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                   <ProcurementHistory purchaseOrderId={order.id} />
                 </article>
               ))}
+          {orderHasMore && <div className="pos-procurement-history-actions">
+            <button type="button" className="pos-button secondary compact" onClick={loadMorePurchaseOrders} disabled={procurementMoreLoading}>
+              {procurementMoreLoading ? "Loading…" : "Load more purchase orders"}
+            </button>
+          </div>}
         </div>
       </section>
 
