@@ -292,18 +292,35 @@ function ReceiptView({ sale, onClose }) {
 function ProcurementHistory({ purchaseOrderId }) {
   const [kind, setKind] = useState("");
   const [rows, setRows] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const openHistory = async (nextKind) => {
-    if (kind === nextKind) { setKind(""); setRows([]); setError(""); return; }
-    setKind(nextKind); setLoading(true); setError(""); setRows([]);
+  const loadHistory = async (nextKind, nextPage, append = false) => {
+    setLoading(true);
+    setError("");
     try {
       const suffix = nextKind === "receipts" ? "receipts" : "supplier-returns";
-      const data = await apiRequest("/admin/procurement/purchase-orders/" + purchaseOrderId + "/" + suffix);
-      setRows(Array.isArray(data) ? data : []);
+      const data = await apiRequest(
+        "/admin/procurement/purchase-orders/" + purchaseOrderId + "/" + suffix +
+        "?page=" + nextPage + "&size=25"
+      );
+      const content = Array.isArray(data?.content) ? data.content : [];
+      setRows((current) => append ? [...current, ...content] : content);
+      setPage(Number(data?.number || 0));
+      setHasMore(Boolean(data?.hasNext));
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
+  };
+
+  const openHistory = async (nextKind) => {
+    if (kind === nextKind) { setKind(""); setRows([]); setError(""); setHasMore(false); return; }
+    setKind(nextKind);
+    setRows([]);
+    setPage(0);
+    setHasMore(false);
+    await loadHistory(nextKind, 0);
   };
 
   return (
@@ -314,9 +331,9 @@ function ProcurementHistory({ purchaseOrderId }) {
       </div>
       {kind && <section className="pos-procurement-history-panel">
         <div className="pos-panel-heading"><h4>{kind === "receipts" ? "Goods receipt audit" : "Supplier return audit"}</h4>
-          <button type="button" className="pos-icon-button" onClick={() => { setKind(""); setRows([]); }} aria-label="Close procurement history"><X size={16} /></button>
+          <button type="button" className="pos-icon-button" onClick={() => { setKind(""); setRows([]); setHasMore(false); }} aria-label="Close procurement history"><X size={16} /></button>
         </div>
-        {loading ? <p>Loading audit records…</p> : error ? <p className="pos-return-error">{error}</p>
+        {loading && rows.length === 0 ? <p>Loading audit records…</p> : error ? <p className="pos-return-error">{error}</p>
           : rows.length === 0 ? <p>No {kind === "receipts" ? "goods receipts" : "supplier returns"} recorded for this order.</p>
           : rows.map((record) => <article className="pos-procurement-history-record" key={record.id}>
             <div><strong>{kind === "receipts" ? record.receiptNumber : record.returnNumber}</strong>
@@ -326,6 +343,13 @@ function ProcurementHistory({ purchaseOrderId }) {
               {item.sku}: {item.quantity} × {money(item.unitCost)}
             </span>)}</div>
           </article>)}
+        {hasMore && <div className="pos-procurement-history-actions">
+          <button type="button" className="pos-button secondary compact"
+            onClick={() => loadHistory(kind, page + 1, true)} disabled={loading}>
+            {loading ? "Loading…" : "Load more history"}
+          </button>
+        </div>}
+        {loading && rows.length > 0 && <p>Loading more audit records…</p>}
       </section>}
     </div>
   );
