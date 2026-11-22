@@ -3627,10 +3627,25 @@ const cartTotal = cart.reduce(
                 {renderProducts()}
               </div>
 
-              {!loadingProducts && !productError && filteredProducts.length > visibleCount && (
+              {!loadingProducts && !productError && (filteredProducts.length > visibleCount || productsHasNext) && (
                 <div className="load-more">
-                  <button type="button" className="text-btn" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
-                    Show more ({filteredProducts.length - visibleCount} remaining)
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => {
+                      if (filteredProducts.length > visibleCount) {
+                        setVisibleCount((n) => n + PAGE_SIZE);
+                      } else {
+                        loadMoreProducts();
+                      }
+                    }}
+                    disabled={loadingMoreProducts}
+                  >
+                    {loadingMoreProducts
+                      ? "Loading products..."
+                      : filteredProducts.length > visibleCount
+                        ? `Show more (${filteredProducts.length - visibleCount} remaining)`
+                        : "Load more products"}
                   </button>
                 </div>
               )}
