@@ -2127,9 +2127,9 @@ const handleProductCsvImport = async (e) => {
   const deleteProduct = async (product) => {
     if (prefs.confirmProductDelete) {
       const ok = await confirm({
-        title: "Delete product",
-        message: `Delete "${getProductTitle(product)}"? This cannot be undone.`,
-        confirmLabel: "Yes, delete",
+        title: "Deactivate product",
+        message: `Remove "${getProductTitle(product)}" from the active catalogue? Inventory and sales history will be retained. You can reactivate it later.`,
+        confirmLabel: "Deactivate",
         danger: true,
       });
       if (!ok) return;
@@ -2138,7 +2138,7 @@ const handleProductCsvImport = async (e) => {
     runRowAction(product.id, async () => {
       const deleted = await api.deleteRecord(`${ENDPOINTS.products}/${product.id}`, "Unable to delete product");
       if (deleted) {
-        onNotice("Product deleted.");
+        onNotice("Product deactivated. Inventory and sales history were retained.");
         await onReload();
       }
     });
@@ -2284,8 +2284,8 @@ const handleProductCsvImport = async (e) => {
   className="admin-clear-button"
   onClick={() => deleteProduct(product)}
   disabled={rowBusyId === product.id}
-  title="Delete product"
-  aria-label="Delete product"
+  title="Deactivate product"
+  aria-label="Deactivate product"
 >
   <Trash2 size={16} aria-hidden="true" />
 </button>
