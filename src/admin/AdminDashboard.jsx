@@ -2810,7 +2810,7 @@ function SettlementReconciliationPage({ api }) {
 
   return (
     <section className="admin-content">
-      <div className="admin-page-heading">
+      <div className="admin-section-header">
         <div>
           <h2>Razorpay settlement reconciliation</h2>
           <p>Fetch provider settlement reports and match payment/refund rows against NMK orders.</p>
