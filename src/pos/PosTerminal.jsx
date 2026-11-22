@@ -1553,7 +1553,10 @@ export default function PosTerminal() {
   const [reportLoading, setReportLoading] = useState(false);
   const [inventoryReport, setInventoryReport] = useState(null);
   const [shiftHistory, setShiftHistory] = useState([]);
+  const [shiftHistoryPage, setShiftHistoryPage] = useState(0);
+  const [shiftHistoryHasMore, setShiftHistoryHasMore] = useState(false);
   const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
+  const [shiftHistoryMoreLoading, setShiftHistoryMoreLoading] = useState(false);
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [procurementCostReport, setProcurementCostReport] = useState(null);
   const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
@@ -1867,11 +1870,28 @@ export default function PosTerminal() {
     setShiftHistoryLoading(true);
     setError("");
     try {
-      const data = await apiRequest(`/admin/pos/shifts/history?locationId=${encodeURIComponent(locationId)}`);
-      setShiftHistory(Array.isArray(data) ? data : []);
+      const data = await apiRequest(`/admin/pos/shifts/history?locationId=${encodeURIComponent(locationId)}&page=0&size=25`);
+      setShiftHistory(Array.isArray(data?.content) ? data.content : []);
+      setShiftHistoryPage(Number(data?.number || 0));
+      setShiftHistoryHasMore(Boolean(data?.hasNext));
     } catch (err) { setError(err.message); }
     finally { setShiftHistoryLoading(false); }
   }, [locationId]);
+
+  const loadMoreShiftHistory = async () => {
+    if (!locationId || !shiftHistoryHasMore || shiftHistoryMoreLoading) return;
+    setShiftHistoryMoreLoading(true);
+    setError("");
+    try {
+      const nextPage = shiftHistoryPage + 1;
+      const data = await apiRequest(`/admin/pos/shifts/history?locationId=${encodeURIComponent(locationId)}&page=${nextPage}&size=25`);
+      const content = Array.isArray(data?.content) ? data.content : [];
+      setShiftHistory((current) => [...current, ...content.filter((item) => !current.some((existing) => existing.id === item.id))]);
+      setShiftHistoryPage(Number(data?.number ?? nextPage));
+      setShiftHistoryHasMore(Boolean(data?.hasNext));
+    } catch (err) { setError(err.message); }
+    finally { setShiftHistoryMoreLoading(false); }
+  };
 
   const loadInventoryReport = useCallback(async () => {
     if (!locationId) return;
@@ -2926,6 +2946,11 @@ export default function PosTerminal() {
                     <td><span className={row.status === "OPEN" ? "pos-stock-status low" : "pos-stock-status healthy"}>{row.status}</span><small>{row.closingReason || "—"}</small></td>
                   </tr>)}</tbody>
                 </table></div>}
+            {shiftHistoryHasMore && !shiftHistoryLoading && <div className="pos-procurement-history-actions">
+              <button type="button" className="pos-button secondary compact" onClick={loadMoreShiftHistory} disabled={shiftHistoryMoreLoading}>
+                {shiftHistoryMoreLoading ? "Loading…" : "Load more shifts"}
+              </button>
+            </div>}
           </section>
         ) : activeTab === "inventory-report" ? (
           <section className="pos-history-panel pos-report-panel">
