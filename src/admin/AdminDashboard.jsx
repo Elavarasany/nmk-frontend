@@ -2935,7 +2935,7 @@ function SettlementReconciliationPage({ api }) {
                     : entries.map((entry) => (
                       <tr key={entry.id}>
                         <td><strong>{entry.entryType}</strong><div className="admin-help-text od-mono">{entry.providerEntityId}</div></td>
-                        <td><div>{entry.orderId || "—"}</div><div className="admin-help-text od-mono">{entry.paymentId || "—"}</div></td>
+                        <td><div>{entry.orderId || "—"}</div><div className="admin-help-text od-mono">{entry.paymentId || "—"}</div>{entry.localDisputeId && <div className="admin-help-text">Dispute #{entry.localDisputeId}</div>}</td>
                         <td>{formatINR(Number(entry.amountPaise || 0) / 100, true)}</td>
                         <td>{formatINR(Number(entry.debitPaise || 0) / 100, true)}</td>
                         <td>{formatINR(Number(entry.creditPaise || 0) / 100, true)}</td>
