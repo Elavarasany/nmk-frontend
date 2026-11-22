@@ -154,6 +154,72 @@ async function apiRequest(path, options = {}) {
   return data;
 }
 
+function WebhookReviewPanel() {
+  const [page, setPage] = useState(0);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadQueue = useCallback(async (nextPage = page) => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiRequest(`/admin/pos/payments/webhook-review?page=${nextPage}&size=25`);
+      setData(result);
+      setPage(nextPage);
+    } catch (err) {
+      setError(err.message || "Unable to load payment exceptions.");
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
+
+  useEffect(() => { loadQueue(0); }, []);
+
+  return (
+    <section className="pos-history-panel pos-webhook-review">
+      <div className="pos-panel-heading">
+        <div><h2>Payment exceptions</h2><p>Razorpay webhook events requiring manual reconciliation. This screen is read-only; it does not issue refunds or change provider status.</p></div>
+        <button type="button" className="pos-button secondary compact" onClick={() => loadQueue(page)} disabled={loading}>
+          <RefreshCw size={15} className={loading ? "pos-spin" : ""} /> Refresh
+        </button>
+      </div>
+      <div className="pos-webhook-warning">
+        <AlertCircle size={17} />
+        <span>Confirm the refund directly in the Razorpay merchant dashboard and match it to the original POS refund before recording any outcome outside this screen. A recorded UPI/card reference alone is not proof of settlement.</span>
+      </div>
+      {error && <div className="pos-alert error" role="alert"><AlertCircle size={17} /><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss error"><X size={15} /></button></div>}
+      {loading && !data ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading payment exceptions…</span></div>
+        : !data?.content?.length ? <div className="pos-empty-state"><CheckCircle2 /><strong>No payment exceptions in this queue</strong><span>Events requiring manual reconciliation will appear here.</span></div>
+          : <>
+            <div className="pos-webhook-summary"><strong>{data.totalElements || 0} event(s) awaiting review</strong><span>Oldest events are listed first · Page {data.totalPages ? page + 1 : 0} of {data.totalPages || 0}</span></div>
+            <div className="pos-history-table-wrap">
+              <table className="pos-history-table">
+                <thead><tr><th>Event / received</th><th>Provider refund / payment</th><th>Order</th><th>Amount</th><th>Provider status</th><th>Attempts / reason</th></tr></thead>
+                <tbody>{data.content.map((item) => (
+                  <tr key={item.id}>
+                    <td><strong>{item.eventType || "Unknown event"}</strong><small>{item.eventId}</small><small>{item.receivedAt ? new Date(item.receivedAt).toLocaleString("en-IN") : "—"}</small></td>
+                    <td><strong>{item.resourceId || "—"}</strong><small>Payment: {item.paymentId || "—"}</small></td>
+                    <td>{item.orderId || "—"}</td>
+                    <td>{item.amountPaise != null ? money(Number(item.amountPaise) / 100) : "—"}<small>{item.currency || ""}</small></td>
+                    <td><span className="pos-webhook-status">{item.providerStatus || item.status}</span></td>
+                    <td>{item.attemptCount}<small>{item.processingError || "Requires manual review"}</small></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <div className="pos-pagination">
+              <span>{data.totalElements || 0} total events</span>
+              <div>
+                <button type="button" disabled={page <= 0 || loading} onClick={() => loadQueue(page - 1)} aria-label="Previous review page"><ChevronLeft size={18} /></button>
+                <button type="button" disabled={page + 1 >= (data.totalPages || 0) || loading} onClick={() => loadQueue(page + 1)} aria-label="Next review page"><ChevronRight size={18} /></button>
+              </div>
+            </div>
+          </>}
+    </section>
+  );
+}
+
 function ProductImage({ src, name }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <div className="pos-product-placeholder"><Package size={28} /></div>;
@@ -2566,6 +2632,7 @@ export default function PosTerminal() {
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "reports" ? "active" : ""}`} onClick={() => setActiveTab("reports")}><BarChart3 size={17} /> Reports</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "inventory-report" ? "active" : ""}`} onClick={() => setActiveTab("inventory-report")}><ClipboardCheck size={17} /> Stock report</button>}
             {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "shift-history" ? "active" : ""}`} onClick={() => setActiveTab("shift-history")}><Clock3 size={17} /> Shift history</button>}
+            {canViewHistory && <button type="button" className={`pos-tab-button ${activeTab === "payment-review" ? "active" : ""}`} onClick={() => setActiveTab("payment-review")}><AlertCircle size={17} /> Payment exceptions</button>}
           </div>
         </div>
 
@@ -2808,6 +2875,8 @@ export default function PosTerminal() {
                 </section>
               </>}
           </section>
+        ) : activeTab === "payment-review" ? (
+          <WebhookReviewPanel />
         ) : activeTab === "reports" ? (
           <section className="pos-history-panel pos-report-panel">
             <div className="pos-panel-heading">
