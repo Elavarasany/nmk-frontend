@@ -5359,6 +5359,7 @@ export default function AdminDashboard() {
 
   const [lists, setLists] = useState({ products: [], orders: [], appointments: [], customers: [], images: [] });
   const [appointmentsPageInfo, setAppointmentsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [ordersPageInfo, setOrdersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [loading, setLoading] = useState({});
   const [listErrors, setListErrors] = useState({});
 
@@ -5423,7 +5424,9 @@ export default function AdminDashboard() {
   const loadList = useCallback(
     async (key, page = 0, append = false) => {
       const { url, message } = LIST_SOURCES[key];
-      const requestUrl = key === "appointments" ? `${url}?page=${page}&size=50` : url;
+      const requestUrl = key === "appointments"
+        ? `${url}?page=${page}&size=50`
+        : key === "orders" ? `${url}?page=${page}&size=25` : url;
 
       setLoading((prev) => ({ ...prev, [key]: true }));
       try {
@@ -5434,6 +5437,17 @@ export default function AdminDashboard() {
             appointments: append ? [...prev.appointments, ...data.content] : data.content,
           }));
           setAppointmentsPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "orders" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            orders: append ? [...prev.orders, ...data.content.filter((item) => !prev.orders.some((existing) => existing.id === item.id))] : data.content,
+          }));
+          setOrdersPageInfo({
             number: Number(data.number || 0),
             totalPages: Number(data.totalPages || 0),
             totalElements: Number(data.totalElements || 0),
@@ -5560,9 +5574,11 @@ export default function AdminDashboard() {
           <OrdersPage
             api={api}
             orders={orders}
+            pageInfo={ordersPageInfo}
             loading={loading.orders}
             loadError={listErrors.orders}
             onReload={reloaders.Orders}
+            onLoadMore={() => loadList("orders", ordersPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
