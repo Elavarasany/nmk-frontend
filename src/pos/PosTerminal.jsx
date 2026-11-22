@@ -178,7 +178,7 @@ function ReceiptView({ sale, onClose }) {
             <span>POS SALES RECEIPT</span>
           </div>
           <div className="pos-receipt-meta">
-            <div><span>Invoice</span><strong>{sale.invoiceNumber}</strong></div>
+            <div><span>POS receipt reference</span><strong>{sale.invoiceNumber}</strong></div>
             <div><span>Date</span><strong>{sale.createdAt ? new Date(sale.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—"}</strong></div>
             <div><span>Cashier</span><strong>{sale.cashierUsername || "—"}</strong></div>
             <div><span>Customer</span><strong>{sale.customerName || "Walk-in customer"}</strong></div>
@@ -214,7 +214,7 @@ function ReceiptView({ sale, onClose }) {
         </div>
         <div className="pos-modal-actions">
           <button type="button" className="pos-button secondary" onClick={onClose}>Close</button>
-          <button type="button" className="pos-button primary" onClick={print}><Printer size={17} /> Print invoice</button>
+          <button type="button" className="pos-button primary" onClick={print}><Printer size={17} /> Print receipt</button>
         </div>
       </section>
     </div>
@@ -2894,7 +2894,7 @@ export default function PosTerminal() {
             <div className="pos-panel-heading"><div><h2>Sales history</h2><p>Completed in-store transactions for the selected location.</p></div><button type="button" className="pos-button secondary compact" onClick={() => loadHistory(historyPage)} disabled={historyLoading}><RefreshCw size={16} className={historyLoading ? "pos-spin" : ""} /> Refresh</button></div>
             {historyLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading sales…</span></div> : history.length === 0 ? <div className="pos-empty-state"><History /><strong>No sales found</strong><span>Completed POS transactions will appear here.</span></div> :
               <div className="pos-history-table-wrap"><table className="pos-history-table"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Payment</th><th>Amount</th><th></th></tr></thead><tbody>{history.map((sale) => <tr key={sale.id}>
-                <td><strong>{sale.invoiceNumber}</strong><small>#{sale.id}</small></td><td>{formatDate(sale.createdAt)}</td><td>{sale.customerName || "Walk-in"}<small>{sale.customerPhone || "No phone"}</small></td><td>{(sale.payments || []).map((p) => p.paymentMethod).join(" + ") || "—"}</td><td><strong>{money(sale.grandTotal)}</strong></td><td><button type="button" className="pos-view-button" onClick={() => openHistorySale(sale)}>View invoice</button></td>
+                <td><strong>{sale.invoiceNumber}</strong><small>#{sale.id}</small></td><td>{formatDate(sale.createdAt)}</td><td>{sale.customerName || "Walk-in"}<small>{sale.customerPhone || "No phone"}</small></td><td>{(sale.payments || []).map((p) => p.paymentMethod).join(" + ") || "—"}</td><td><strong>{money(sale.grandTotal)}</strong></td><td><button type="button" className="pos-view-button" onClick={() => openHistorySale(sale)}>View receipt</button></td>
               </tr>)}</tbody></table></div>}
             <div className="pos-pagination"><span>Page {historyPages ? historyPage + 1 : 0} of {historyPages}</span><div><button type="button" disabled={historyPage <= 0 || historyLoading} onClick={() => loadHistory(historyPage - 1)} aria-label="Previous page"><ChevronLeft size={18} /></button><button type="button" disabled={historyPage + 1 >= historyPages || historyLoading} onClick={() => loadHistory(historyPage + 1)} aria-label="Next page"><ChevronRight size={18} /></button></div></div>
           </section>
