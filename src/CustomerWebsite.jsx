@@ -2670,16 +2670,22 @@ export default function CustomerWebsite() {
     return () => controller.abort();
   }, [productReloadKey]);
 
-  // KEEP SAVED CART IN STEP WITH THE CATALOGUE (price, stock, removals)
+  // KEEP SAVED CART IN STEP WITH LOADED PRODUCTS AND DIRECT CART REFERENCES.
   useEffect(() => {
-    if (!productsReady) return;
+    if (!productsReady || !cartReferencesReady) return;
 
-    const { items, removed } = reconcileCart(cartRef.current, products);
+    const byId = new Map();
+    [...products, ...cartReferenceProducts].forEach((product) => byId.set(Number(product.id), product));
+    const { items, removed } = reconcileCart(
+      cartRef.current,
+      [...byId.values()],
+      cartUnavailableProductIds
+    );
     cartRef.current = items;
     setCart(items);
 
     if (removed > 0) notify("Some items in your cart are no longer available and were removed.");
-  }, [products, productsReady, notify]);
+  }, [products, cartReferenceProducts, cartUnavailableProductIds, productsReady, cartReferencesReady, notify]);
 
   // FETCH WEBSITE IMAGES
   useEffect(() => {
