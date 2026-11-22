@@ -1902,6 +1902,7 @@ export default function PosTerminal() {
     const requestId = ++inventoryReportRequestRef.current;
     const requestedLocationId = String(locationId);
     setInventoryReportLoading(true);
+    setInventoryReportMoreLoading(false);
     setError("");
     try {
       const data = await apiRequest(`/admin/pos/reports/inventory?locationId=${encodeURIComponent(locationId)}`);
