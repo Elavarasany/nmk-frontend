@@ -5373,6 +5373,7 @@ export default function AdminDashboard() {
   const [lists, setLists] = useState({ products: [], orders: [], appointments: [], customers: [], images: [] });
   const [appointmentsPageInfo, setAppointmentsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [ordersPageInfo, setOrdersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [customersPageInfo, setCustomersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [loading, setLoading] = useState({});
   const [listErrors, setListErrors] = useState({});
 
@@ -5439,7 +5440,8 @@ export default function AdminDashboard() {
       const { url, message } = LIST_SOURCES[key];
       const requestUrl = key === "appointments"
         ? `${url}?page=${page}&size=50`
-        : key === "orders" ? `${url}?page=${page}&size=25` : url;
+        : key === "orders" ? `${url}?page=${page}&size=25`
+        : key === "customers" ? `${url}?page=${page}&size=50` : url;
 
       setLoading((prev) => ({ ...prev, [key]: true }));
       try {
@@ -5461,6 +5463,17 @@ export default function AdminDashboard() {
             orders: append ? [...prev.orders, ...data.content.filter((item) => !prev.orders.some((existing) => existing.id === item.id))] : data.content,
           }));
           setOrdersPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "customers" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            customers: append ? [...prev.customers, ...data.content] : data.content,
+          }));
+          setCustomersPageInfo({
             number: Number(data.number || 0),
             totalPages: Number(data.totalPages || 0),
             totalElements: Number(data.totalElements || 0),
@@ -5612,8 +5625,10 @@ export default function AdminDashboard() {
           <CustomersPage
             orders={orders}
             customers={customers}
+            pageInfo={customersPageInfo}
             loading={loading.customers}
             onReload={reloaders.Customers}
+            onLoadMore={() => loadList("customers", customersPageInfo.number + 1, true)}
           />
         );
       case "Marketing":
