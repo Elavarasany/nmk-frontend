@@ -1720,7 +1720,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
                 : !supplierBills.length ? <div className="pos-empty-state"><FileText /><span>No supplier bills recorded for this supplier.</span></div>
                   : supplierBills.map((bill) => <article className="pos-supplier-bill-card" key={bill.id}>
                     <div><strong>{bill.invoiceNumber}</strong><span>{bill.billType.replaceAll("_", " ")} · Invoice {bill.invoiceDate} · Due {bill.dueDate || "on receipt"}</span></div>
-                    <div className="pos-supplier-bill-totals"><span>Bill {money(bill.amount)}</span><span>Paid {money(bill.paidAmount)}</span><strong>Due {money(bill.outstandingAmount)}</strong></div>
+                    <div className="pos-supplier-bill-totals"><span>Bill {money(bill.amount)}</span><span>Paid {money(bill.paidAmount)}</span><span>Credited {money(bill.creditedAmount)}</span><strong>Due {money(bill.outstandingAmount)}</strong></div>
                     <div className="pos-procurement-form-actions">
                       <button type="button" className="pos-button secondary compact" onClick={() => loadSupplierPaymentHistory(bill.id)}>Payment history</button>
                       <button type="button" className="pos-button secondary compact" onClick={() => loadSupplierCreditNotes(bill.id)}>Credit notes</button>
