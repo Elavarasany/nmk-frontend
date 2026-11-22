@@ -549,6 +549,29 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   const [supplierEmail, setSupplierEmail] = useState("");
   const [supplierAddress, setSupplierAddress] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
+  const [supplierBills, setSupplierBills] = useState([]);
+  const [supplierBillsLoading, setSupplierBillsLoading] = useState(false);
+  const [supplierBillForm, setSupplierBillForm] = useState(() => {
+    const today = new Date();
+    return { invoiceNumber: "", invoiceDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`, dueDate: "", amount: "", billType: "GOODS", purchaseOrderId: "" };
+  });
+  const [supplierBillPassword, setSupplierBillPassword] = useState("");
+  const [supplierBillSaving, setSupplierBillSaving] = useState(false);
+  const pendingSupplierBillRecord = useRef(readPendingOperation("nmk.pos.pending-supplier-bill.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.supplierId && payload.invoiceNumber && payload.amount)));
+  const [supplierBillPayload, setSupplierBillPayload] = useState(pendingSupplierBillRecord.current);
+  const [supplierPaymentTarget, setSupplierPaymentTarget] = useState(null);
+  const [supplierPaymentAmount, setSupplierPaymentAmount] = useState("");
+  const [supplierPaymentMethod, setSupplierPaymentMethod] = useState("BANK");
+  const [supplierPaymentReference, setSupplierPaymentReference] = useState("");
+  const [supplierPaymentPassword, setSupplierPaymentPassword] = useState("");
+  const [supplierPaymentSaving, setSupplierPaymentSaving] = useState(false);
+  const pendingSupplierPaymentRecord = useRef(readPendingOperation("nmk.pos.pending-supplier-payment.v1", (payload) =>
+    Boolean(payload?.idempotencyKey && payload.billId && payload.amount)));
+  const [supplierPaymentPayload, setSupplierPaymentPayload] = useState(pendingSupplierPaymentRecord.current);
+  const [landedCostBillId, setLandedCostBillId] = useState(null);
+  const [landedCostAllocations, setLandedCostAllocations] = useState([]);
+  const [landedCostLoading, setLandedCostLoading] = useState(false);
   const [purchaseOrderNotes, setPurchaseOrderNotes] = useState("");
   const [purchaseOrderItems, setPurchaseOrderItems] = useState([{ variantId: "", orderedQuantity: "1", unitCost: "" }]);
   const [purchaseOrderPayload, setPurchaseOrderPayload] = useState(() => readPendingOperation("nmk.pos.pending-purchase-order.v1", (payload) =>
@@ -662,6 +685,142 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       setOrderHasMore(Boolean(data?.hasNext));
     } catch (err) { onError(err.message); }
     finally { setProcurementMoreLoading(false); }
+  };
+
+  const loadSupplierBills = useCallback(async () => {
+    if (!selectedSupplierId || staffRole !== "ADMIN") { setSupplierBills([]); return; }
+    setSupplierBillsLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(`/admin/procurement/suppliers/${encodeURIComponent(selectedSupplierId)}/bills?page=0&size=50`);
+      setSupplierBills(Array.isArray(data?.content) ? data.content : []);
+    } catch (err) { setError(err.message); }
+    finally { setSupplierBillsLoading(false); }
+  }, [selectedSupplierId, staffRole]);
+
+  const submitSupplierBill = async (event) => {
+    event.preventDefault();
+    if (staffRole !== "ADMIN") { onError("Only an administrator can post supplier bills."); return; }
+    if (!supplierBillPayload && (!selectedSupplierId || !supplierBillForm.invoiceNumber.trim() || !supplierBillForm.amount)) {
+      onError("Choose a supplier and enter the supplier invoice number and amount."); return;
+    }
+    if (!supplierBillPayload && ["GOODS", "LANDED_COST"].includes(supplierBillForm.billType) && !supplierBillForm.purchaseOrderId) {
+      onError("Choose the purchase order linked to this supplier invoice."); return;
+    }
+    let payload = supplierBillPayload;
+    if (!payload) {
+      payload = {
+        supplierId: Number(selectedSupplierId),
+        purchaseOrderId: supplierBillForm.purchaseOrderId ? Number(supplierBillForm.purchaseOrderId) : null,
+        invoiceNumber: supplierBillForm.invoiceNumber.trim(),
+        invoiceDate: supplierBillForm.invoiceDate,
+        dueDate: supplierBillForm.dueDate || null,
+        amount: Number(supplierBillForm.amount),
+        billType: supplierBillForm.billType,
+        idempotencyKey: newIdempotencyKey(),
+      };
+      pendingSupplierBillRecord.current = payload;
+      setSupplierBillPayload(payload);
+      savePendingOperation("nmk.pos.pending-supplier-bill.v1", payload);
+    }
+    setSupplierBillSaving(true);
+    setError("");
+    try {
+      const authorizationToken = await authorizePosAction("SUPPLIER_BILL_POST", supplierBillPassword);
+      const created = await apiRequest("/admin/procurement/supplier-bills", {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "X-Admin-Action-Authorization": authorizationToken },
+      });
+      pendingSupplierBillRecord.current = null;
+      setSupplierBillPayload(null);
+      sessionStorage.removeItem("nmk.pos.pending-supplier-bill.v1");
+      setSupplierBillPassword("");
+      setSupplierBillForm((current) => ({ ...current, invoiceNumber: "", dueDate: "", amount: "", purchaseOrderId: "" }));
+      await loadSupplierBills();
+      onNotice(`Supplier bill ${created.invoiceNumber} posted. Outstanding: ${money(created.outstandingAmount)}.`);
+    } catch (err) {
+      if (err.status === 400) {
+        pendingSupplierBillRecord.current = null;
+        setSupplierBillPayload(null);
+        sessionStorage.removeItem("nmk.pos.pending-supplier-bill.v1");
+      }
+      onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same bill; its idempotency key is retained." : ""}`);
+    } finally { setSupplierBillSaving(false); }
+  };
+
+  const beginSupplierPayment = (bill) => {
+    setSupplierPaymentTarget(bill);
+    setSupplierPaymentAmount(String(bill.outstandingAmount));
+    setSupplierPaymentMethod("BANK");
+    setSupplierPaymentReference("");
+    setSupplierPaymentPassword("");
+    setSupplierPaymentPayload(null);
+    pendingSupplierPaymentRecord.current = null;
+    sessionStorage.removeItem("nmk.pos.pending-supplier-payment.v1");
+  };
+
+  const submitSupplierPayment = async (event) => {
+    event.preventDefault();
+    if (staffRole !== "ADMIN" || !supplierPaymentTarget) { onError("Only an administrator can record supplier payments."); return; }
+    let payload = supplierPaymentPayload;
+    if (!payload) {
+      const amount = Number(supplierPaymentAmount);
+      if (!Number.isFinite(amount) || amount <= 0) { onError("Enter a valid payment amount."); return; }
+      if (supplierPaymentMethod !== "CASH" && !supplierPaymentReference.trim()) { onError("Enter the bank/UPI payment reference."); return; }
+      if (supplierPaymentMethod === "CASH" && (!shift || shift.status !== "OPEN")) { onError("Open a cashier shift before recording a supplier cash payment."); return; }
+      payload = {
+        billId: supplierPaymentTarget.id,
+        amount,
+        paymentMethod: supplierPaymentMethod,
+        reference: supplierPaymentReference.trim() || null,
+        shiftId: supplierPaymentMethod === "CASH" ? shift.id : null,
+        idempotencyKey: newIdempotencyKey(),
+      };
+      pendingSupplierPaymentRecord.current = payload;
+      setSupplierPaymentPayload(payload);
+      savePendingOperation("nmk.pos.pending-supplier-payment.v1", payload);
+    }
+    setSupplierPaymentSaving(true);
+    setError("");
+    try {
+      const authorizationToken = await authorizePosAction("SUPPLIER_PAYMENT", supplierPaymentPassword);
+      const saved = await apiRequest(`/admin/procurement/supplier-bills/${payload.billId}/payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: payload.amount, paymentMethod: payload.paymentMethod,
+          reference: payload.reference, shiftId: payload.shiftId,
+          idempotencyKey: payload.idempotencyKey,
+        }),
+        headers: { "X-Admin-Action-Authorization": authorizationToken },
+      });
+      pendingSupplierPaymentRecord.current = null;
+      setSupplierPaymentPayload(null);
+      sessionStorage.removeItem("nmk.pos.pending-supplier-payment.v1");
+      setSupplierPaymentTarget(null);
+      setSupplierPaymentPassword("");
+      await loadSupplierBills();
+      if (payload.paymentMethod === "CASH") await loadCurrentShift();
+      onNotice(`Supplier payment ${money(saved.amount)} recorded.`);
+    } catch (err) {
+      if (err.status === 400) {
+        pendingSupplierPaymentRecord.current = null;
+        setSupplierPaymentPayload(null);
+        sessionStorage.removeItem("nmk.pos.pending-supplier-payment.v1");
+      }
+      onError(`${err.message}${!err.status || err.status >= 500 || err.status === 409 ? " Retry the exact same payment; its idempotency key is retained." : ""}`);
+    } finally { setSupplierPaymentSaving(false); }
+  };
+
+  const loadLandedCostAllocations = async (billId) => {
+    setLandedCostLoading(true);
+    setLandedCostBillId(billId);
+    setLandedCostAllocations([]);
+    try {
+      const rows = await apiRequest(`/admin/procurement/supplier-bills/${billId}/landed-cost-allocations`);
+      setLandedCostAllocations(Array.isArray(rows) ? rows : []);
+    } catch (err) { onError(err.message); }
+    finally { setLandedCostLoading(false); }
   };
 
   const createSupplier = async (event) => {
@@ -1109,6 +1268,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
   useEffect(() => { loadLowStock(); }, [loadLowStock]);
   useEffect(() => { loadMovementHistory(0); }, [loadMovementHistory]);
   useEffect(() => { loadProcurement(); }, [loadProcurement]);
+  useEffect(() => { if (selectedSupplierId && staffRole === "ADMIN") loadSupplierBills(); }, [selectedSupplierId, staffRole, loadSupplierBills]);
   useEffect(() => {
     if (!purchaseOrderPayload) return;
     setSelectedSupplierId(String(purchaseOrderPayload.supplierId));
@@ -1371,6 +1531,80 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
           </form>
         </div>
 
+        {staffRole === "ADMIN" && <section className="pos-supplier-accounting">
+          <div className="pos-panel-heading"><div><h4>Supplier accounts payable</h4><p>Post supplier invoices, record authorized payments and inspect receipt-level landed-cost allocations.</p></div>
+            <button type="button" className="pos-button secondary compact" onClick={loadSupplierBills} disabled={supplierBillsLoading}><RefreshCw size={14} /> Refresh bills</button>
+          </div>
+          <div className="pos-supplier-accounting-grid">
+            <form className="pos-procurement-form" onSubmit={submitSupplierBill}>
+              <h5>Post supplier bill</h5>
+              <label>Supplier<select value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)} disabled={Boolean(supplierBillPayload)} required>
+                <option value="">Choose supplier</option>
+                {suppliers.filter((supplier) => supplier.active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+              </select></label>
+              <label>Bill type<select value={supplierBillForm.billType} onChange={(event) => setSupplierBillForm((current) => ({ ...current, billType: event.target.value, purchaseOrderId: "" }))} disabled={Boolean(supplierBillPayload)}>
+                <option value="GOODS">Goods invoice</option><option value="LANDED_COST">Direct landed cost</option><option value="OTHER">Other supplier expense</option>
+              </select></label>
+              {supplierBillForm.billType !== "OTHER" && <label>Purchase order<select value={supplierBillForm.purchaseOrderId} onChange={(event) => setSupplierBillForm((current) => ({ ...current, purchaseOrderId: event.target.value }))} disabled={Boolean(supplierBillPayload)} required>
+                <option value="">Choose received purchase order</option>
+                {purchaseOrders.filter((order) => String(order.supplierId) === String(selectedSupplierId) && ["PARTIALLY_RECEIVED", "RECEIVED"].includes(order.status)).map((order) => <option key={order.id} value={order.id}>{order.orderNumber} · {order.status}</option>)}
+              </select></label>}
+              <label>Supplier invoice number<input value={supplierBillForm.invoiceNumber} onChange={(event) => setSupplierBillForm((current) => ({ ...current, invoiceNumber: event.target.value }))} maxLength={100} required disabled={Boolean(supplierBillPayload)} /></label>
+              <div className="pos-inventory-fields">
+                <label>Invoice date<input type="date" value={supplierBillForm.invoiceDate} onChange={(event) => setSupplierBillForm((current) => ({ ...current, invoiceDate: event.target.value }))} required disabled={Boolean(supplierBillPayload)} /></label>
+                <label>Due date<input type="date" value={supplierBillForm.dueDate} onChange={(event) => setSupplierBillForm((current) => ({ ...current, dueDate: event.target.value }))} disabled={Boolean(supplierBillPayload)} /></label>
+                <label>Bill amount (₹)<input type="number" min="0.01" step="0.01" value={supplierBillForm.amount} onChange={(event) => setSupplierBillForm((current) => ({ ...current, amount: event.target.value }))} required disabled={Boolean(supplierBillPayload)} /></label>
+              </div>
+              <label className="pos-action-password">Administrator password
+                <input type="password" autoComplete="current-password" value={supplierBillPassword} onChange={(event) => setSupplierBillPassword(event.target.value)} disabled={supplierBillSaving} />
+              </label>
+              <button type="submit" className="pos-button primary" disabled={supplierBillSaving || !selectedSupplierId || !supplierBillPassword.trim()}>
+                {supplierBillSaving ? "Posting…" : supplierBillPayload ? "Retry same bill" : "Post supplier bill"}
+              </button>
+              {supplierBillPayload && <p className="pos-retry-note">A bill request is pending. Retry the exact same details; editing is locked to prevent duplicate invoices.</p>}
+            </form>
+            <div className="pos-supplier-bills">
+              <h5>Supplier bills · {suppliers.find((supplier) => String(supplier.id) === String(selectedSupplierId))?.name || "Select a supplier"}</h5>
+              {supplierBillsLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading supplier bills…</span></div>
+                : !supplierBills.length ? <div className="pos-empty-state"><FileText /><span>No supplier bills recorded for this supplier.</span></div>
+                  : supplierBills.map((bill) => <article className="pos-supplier-bill-card" key={bill.id}>
+                    <div><strong>{bill.invoiceNumber}</strong><span>{bill.billType.replaceAll("_", " ")} · {bill.invoiceDate}</span></div>
+                    <div className="pos-supplier-bill-totals"><span>Bill {money(bill.amount)}</span><span>Paid {money(bill.paidAmount)}</span><strong>Due {money(bill.outstandingAmount)}</strong></div>
+                    <div className="pos-procurement-form-actions">
+                      {bill.billType === "LANDED_COST" && <button type="button" className="pos-button secondary compact" onClick={() => loadLandedCostAllocations(bill.id)}>View allocations</button>}
+                      {Number(bill.outstandingAmount) > 0 && <button type="button" className="pos-button primary compact" onClick={() => beginSupplierPayment(bill)}>Record payment</button>}
+                    </div>
+                  </article>)}
+            </div>
+          </div>
+          {supplierPaymentTarget && <form className="pos-supplier-payment-form" onSubmit={submitSupplierPayment}>
+            <h5>Record payment · {supplierPaymentTarget.invoiceNumber} · Outstanding {money(supplierPaymentTarget.outstandingAmount)}</h5>
+            <div className="pos-inventory-fields">
+              <label>Payment amount (₹)<input type="number" min="0.01" max={supplierPaymentTarget.outstandingAmount} step="0.01" value={supplierPaymentAmount} onChange={(event) => setSupplierPaymentAmount(event.target.value)} disabled={Boolean(supplierPaymentPayload)} required /></label>
+              <label>Method<select value={supplierPaymentMethod} onChange={(event) => setSupplierPaymentMethod(event.target.value)} disabled={Boolean(supplierPaymentPayload)}>
+                <option value="BANK">Bank transfer</option><option value="UPI">UPI</option><option value="CASH">Cash from open drawer</option><option value="OTHER">Other</option>
+              </select></label>
+              {supplierPaymentMethod !== "CASH" && <label>Payment reference<input value={supplierPaymentReference} onChange={(event) => setSupplierPaymentReference(event.target.value)} maxLength={160} disabled={Boolean(supplierPaymentPayload)} required /></label>}
+            </div>
+            {supplierPaymentMethod === "CASH" && <p className="pos-report-note">{shift?.status === "OPEN" ? `Cash payment will be recorded as an OUT movement in shift #${shift.id}.` : "A register shift must be open before a supplier cash payment can be recorded."}</p>}
+            <label className="pos-action-password">Administrator password
+              <input type="password" autoComplete="current-password" value={supplierPaymentPassword} onChange={(event) => setSupplierPaymentPassword(event.target.value)} disabled={supplierPaymentSaving} />
+            </label>
+            <div className="pos-procurement-form-actions">
+              <button type="button" className="pos-button secondary" onClick={() => { setSupplierPaymentTarget(null); setSupplierPaymentPayload(null); pendingSupplierPaymentRecord.current = null; sessionStorage.removeItem("nmk.pos.pending-supplier-payment.v1"); }} disabled={supplierPaymentSaving || Boolean(supplierPaymentPayload)}>Cancel</button>
+              <button type="submit" className="pos-button primary" disabled={supplierPaymentSaving || !supplierPaymentPassword.trim() || (supplierPaymentMethod === "CASH" && shift?.status !== "OPEN")}>{supplierPaymentSaving ? "Saving…" : supplierPaymentPayload ? "Retry same payment" : "Confirm payment"}</button>
+            </div>
+            {supplierPaymentPayload && <p className="pos-retry-note">A payment request is pending. Retry the exact same payment to avoid duplicate cash movement.</p>}
+          </form>}
+          {landedCostBillId && <section className="pos-supplier-landed-costs">
+            <div className="pos-panel-heading"><h5>Landed-cost allocation · Bill #{landedCostBillId}</h5><button type="button" className="pos-button secondary compact" onClick={() => { setLandedCostBillId(null); setLandedCostAllocations([]); }}>Close</button></div>
+            {landedCostLoading ? <p>Loading allocations…</p> : <div className="pos-history-table-wrap"><table className="pos-history-table">
+              <thead><tr><th>SKU</th><th>Received qty</th><th>Base goods value</th><th>Allocated cost</th><th>Derived landed unit cost</th></tr></thead>
+              <tbody>{landedCostAllocations.map((row) => <tr key={row.id}><td>{row.sku}</td><td>{row.receivedQuantity}</td><td>{money(row.baseGoodsValue)}</td><td>{money(row.allocatedAmount)}</td><td>{money(row.landedUnitCost)}</td></tr>)}</tbody>
+            </table></div>}
+          </section>}
+          <p className="pos-report-note">Customer accounts receivable is disabled because POS sales must be fully paid. Landed-cost allocations are receipt-level records only; they do not yet update weighted-average inventory valuation or COGS. Supplier credit notes and bank-statement reconciliation are not yet supported.</p>
+        </section>}
         <div className="pos-procurement-orders">
           <div className="pos-panel-heading"><div><h4>Purchase orders</h4><p>Orders for the selected store location.</p></div></div>
           {procurementLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Loading purchase orders…</span></div>
