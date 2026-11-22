@@ -38,7 +38,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 - [ ] Attempt a UPI/card sale without a transaction reference. It must be blocked by the UI and rejected by the backend if the API is called directly.
 - [ ] Enter a test UTR/card-terminal reference and complete a non-cash sale. Confirm the reference is recorded. Do not interpret this as provider settlement verification.
 - [ ] Attempt to apply a discount as CASHIER through a direct API request. The backend must reject it.
-- [ ] Sign in as MANAGER/ADMIN and verify an authorized discount is accepted, bounded by the sale subtotal, and reflected consistently in receipt and report.
+- [ ] Sign in as MANAGER/ADMIN and verify a discount is accepted, bounded by the sale subtotal, and reflected consistently in receipt and report. Current behavior has no amount/percentage ceiling or reason/approval audit; obtain owner-approved discount policy before production.
 
 ## Retry and inventory contention
 
@@ -69,7 +69,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 
 - [ ] Use direct API requests (not only hidden UI controls) to confirm CASHIER is denied sales history, returns, voids, exchanges, reports, inventory, procurement and manager shift history.
 - [ ] Confirm CASHIER can only view, add cash movements to and close their own shift; another cashier's shift is inaccessible. Confirm MANAGER/ADMIN can review and close another staff member's shift.
-- [ ] Confirm CASHIER cannot apply sale or exchange discounts, even when the request is sent directly to the API.
+- [ ] Confirm CASHIER cannot apply sale or exchange discounts, even when the request is sent directly to the API. Confirm MANAGER/ADMIN discount requests are bounded by subtotal; separately obtain owner approval for the missing discount ceilings, reason requirement and exception-approval rules.
 - [ ] Confirm manager/admin sensitive actions (return, void, exchange, inventory receipt/adjustment, stock-count post/cancel, goods receipt, supplier return and PO submit) require a fresh password authorization for the exact action.
 - [ ] Confirm a sensitive-action authorization token cannot be reused, used by another account, used for a different action, or used after its two-minute expiry.
 - [ ] Disable a staff account after issuing its JWT; verify subsequent API requests with that token are rejected. Confirm role changes take effect on the next request.
