@@ -3561,7 +3561,13 @@ function AppointmentsPage({ api, appointments, pageInfo, loading, onReload, onLo
    CUSTOMERS
 ========================= */
 
-function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadMore }) {
+function CustomersPage({ api, customers, pageInfo, loading, onReload, onLoadMore }) {
+  const [search, setSearch] = useState("");
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [historyOrders, setHistoryOrders] = useState([]);
+  const [historyPageInfo, setHistoryPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState(null);
 
@@ -3575,15 +3581,74 @@ function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadM
     return customers.filter((c) => matchesTerm(term, c.customerName, c.email, c.phone));
   }, [customers, search]);
 
-  const selectedOrders = useMemo(() => {
-    if (!selected) return [];
+  useEffect(() => {
+    if (!selected) {
+      setHistoryOrders([]);
+      setHistoryPageInfo({ number: 0, totalPages: 0, totalElements: 0, last: true });
+      setHistoryError("");
+      setHistoryLoading(false);
+      return undefined;
+    }
 
-    return orders.filter((order) =>
-      selected.email
-        ? order.email?.trim().toLowerCase() === selected.email.trim().toLowerCase()
-        : order.phone === selected.phone
-    );
-  }, [orders, selected]);
+    let active = true;
+    const params = new URLSearchParams({ page: "0", size: "25" });
+    if (selected.email?.trim()) params.set("email", selected.email.trim());
+    else if (selected.phone?.trim()) params.set("phone", selected.phone.trim());
+
+    setHistoryOrders([]);
+    setHistoryPageInfo({ number: 0, totalPages: 0, totalElements: 0, last: true });
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    api.getJson(`${ENDPOINTS.customers}/history?${params.toString()}`, "Unable to load this customer's order history")
+      .then((data) => {
+        if (!active || !data) return;
+        setHistoryOrders(Array.isArray(data.content) ? data.content : []);
+        setHistoryPageInfo({
+          number: Number(data.number || 0),
+          totalPages: Number(data.totalPages || 0),
+          totalElements: Number(data.totalElements || 0),
+          last: Boolean(data.last),
+        });
+      })
+      .catch((err) => {
+        if (active) setHistoryError(err.message || "Unable to load this customer's order history");
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [api, selected?.email, selected?.phone, selectedKey]);
+
+  const loadMoreHistory = async () => {
+    if (!selected || historyLoading || historyPageInfo.last) return;
+    const nextPage = historyPageInfo.number + 1;
+    const params = new URLSearchParams({ page: String(nextPage), size: "25" });
+    if (selected.email?.trim()) params.set("email", selected.email.trim());
+    else if (selected.phone?.trim()) params.set("phone", selected.phone.trim());
+
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const data = await api.getJson(`${ENDPOINTS.customers}/history?${params.toString()}`, "Unable to load more customer orders");
+      if (!data) return;
+      setHistoryOrders((previous) => [
+        ...previous,
+        ...(Array.isArray(data.content) ? data.content.filter((order) => !previous.some((existing) => existing.id === order.id)) : []),
+      ]);
+      setHistoryPageInfo({
+        number: Number(data.number || nextPage),
+        totalPages: Number(data.totalPages || 0),
+        totalElements: Number(data.totalElements || 0),
+        last: Boolean(data.last),
+      });
+    } catch (err) {
+      setHistoryError(err.message || "Unable to load more customer orders");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const totals = useMemo(
     () => ({
@@ -3696,9 +3761,15 @@ function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadM
               </div>
 
               <h3>Order History</h3>
-              <p className="admin-help-text">This history includes orders currently loaded in the Orders tab. Load more orders there to include older records.</p>
+              <p className="admin-help-text">
+                {historyOrders.length} loaded of {historyPageInfo.totalElements} orders for this customer.
+              </p>
 
-              {selectedOrders.length === 0 ? (
+              {historyLoading && historyOrders.length === 0 ? (
+                <p className="admin-loading">Loading customer order history...</p>
+              ) : historyError && historyOrders.length === 0 ? (
+                <p className="admin-error" role="alert">{historyError}</p>
+              ) : historyOrders.length === 0 ? (
                 <p>No orders found for this customer.</p>
               ) : (
                 <div className="admin-table-wrapper">
@@ -3714,7 +3785,7 @@ function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadM
                     </thead>
 
                     <tbody>
-                      {selectedOrders.map((order) => (
+                      {historyOrders.map((order) => (
                         <tr key={order.id}>
                           <td>#{order.id}</td>
                           <td>{formatDate(order.orderDate)}</td>
@@ -3725,6 +3796,18 @@ function CustomersPage({ orders, customers, pageInfo, loading, onReload, onLoadM
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {historyError && historyOrders.length > 0 && (
+                <p className="admin-error" role="alert">{historyError}</p>
+              )}
+
+              {!historyPageInfo.last && (
+                <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                  <button type="button" className="admin-secondary-button" disabled={historyLoading} onClick={loadMoreHistory}>
+                    {historyLoading ? "Loading..." : "Load more customer orders"}
+                  </button>
                 </div>
               )}
             </div>
@@ -5590,7 +5673,7 @@ export default function AdminDashboard() {
     Products: () => loadList("products"),
     Orders: () => loadList("orders"),
     Appointments: () => loadList("appointments"),
-    Customers: () => Promise.all([loadList("customers"), loadList("orders")]),
+    Customers: () => loadList("customers"),
     Marketing: () => Promise.all([loadMarketing(), reloadImages()]),
   };
 
@@ -5665,7 +5748,7 @@ export default function AdminDashboard() {
       case "Customers":
         return (
           <CustomersPage
-            orders={orders}
+            api={api}
             customers={customers}
             pageInfo={customersPageInfo}
             loading={loading.customers}
