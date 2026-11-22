@@ -1558,6 +1558,8 @@ export default function PosTerminal() {
   const [shiftHistoryLoading, setShiftHistoryLoading] = useState(false);
   const [shiftHistoryMoreLoading, setShiftHistoryMoreLoading] = useState(false);
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
+  const [inventoryReportMoreLoading, setInventoryReportMoreLoading] = useState(false);
+  const inventoryReportRequestRef = useRef(0);
   const [procurementCostReport, setProcurementCostReport] = useState(null);
   const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
   const [procurementCostReportMoreLoading, setProcurementCostReportMoreLoading] = useState(false);
@@ -1897,14 +1899,49 @@ export default function PosTerminal() {
 
   const loadInventoryReport = useCallback(async () => {
     if (!locationId) return;
+    const requestId = ++inventoryReportRequestRef.current;
+    const requestedLocationId = String(locationId);
     setInventoryReportLoading(true);
     setError("");
     try {
       const data = await apiRequest(`/admin/pos/reports/inventory?locationId=${encodeURIComponent(locationId)}`);
-      setInventoryReport(data);
-    } catch (err) { setError(err.message); }
-    finally { setInventoryReportLoading(false); }
+      if (requestId === inventoryReportRequestRef.current && requestedLocationId === String(locationId)) {
+        setInventoryReport(data);
+      }
+    } catch (err) {
+      if (requestId === inventoryReportRequestRef.current) setError(err.message);
+    } finally {
+      if (requestId === inventoryReportRequestRef.current) setInventoryReportLoading(false);
+    }
   }, [locationId]);
+
+  const loadMoreInventoryReportEntries = useCallback(async () => {
+    if (!locationId || !inventoryReport?.itemsHasNext || inventoryReportMoreLoading) return;
+    const requestId = inventoryReportRequestRef.current;
+    const requestedLocationId = String(locationId);
+    const nextPage = Number(inventoryReport.itemsPage || 0) + 1;
+    setInventoryReportMoreLoading(true);
+    setError("");
+    try {
+      const data = await apiRequest(
+        `/admin/pos/reports/inventory/entries?locationId=${encodeURIComponent(locationId)}&page=${nextPage}&size=50`
+      );
+      if (requestId === inventoryReportRequestRef.current && requestedLocationId === String(locationId)) {
+        const rows = Array.isArray(data?.content) ? data.content : [];
+        setInventoryReport((current) => current ? ({
+          ...current,
+          items: [...(current.items || []), ...rows.filter((row) => !(current.items || []).some((existing) => existing.variantId === row.variantId))],
+          itemsPage: Number(data?.number ?? nextPage),
+          itemsSize: Number(data?.size ?? 50),
+          itemsHasNext: Boolean(data?.hasNext),
+        }) : current);
+      }
+    } catch (err) {
+      if (requestId === inventoryReportRequestRef.current) setError(err.message);
+    } finally {
+      if (requestId === inventoryReportRequestRef.current) setInventoryReportMoreLoading(false);
+    }
+  }, [locationId, inventoryReport, inventoryReportMoreLoading]);
 
   const loadProcurementCostReport = useCallback(async () => {
     if (!locationId || !reportFrom || !reportTo || reportTo < reportFrom) return;
@@ -3020,6 +3057,12 @@ export default function PosTerminal() {
                       <td><span className={row.lowStock ? "pos-stock-status low" : "pos-stock-status healthy"}>{row.lowStock ? "Low stock" : "In range"}</span></td>
                     </tr>)}</tbody>
                   </table></div>
+                  <p className="pos-retry-note">Showing {(inventoryReport.items || []).length} of {inventoryReport.totalItems ?? inventoryReport.variantCount} variants.</p>
+                  {inventoryReport.itemsHasNext && <div className="pos-procurement-history-actions">
+                    <button type="button" className="pos-button secondary compact" onClick={loadMoreInventoryReportEntries} disabled={inventoryReportMoreLoading}>
+                      {inventoryReportMoreLoading ? "Loading…" : "Load more variants"}
+                    </button>
+                  </div>}
                 </section>
               </>}
           </section>
