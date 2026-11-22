@@ -1560,6 +1560,7 @@ export default function PosTerminal() {
   const [inventoryReportLoading, setInventoryReportLoading] = useState(false);
   const [procurementCostReport, setProcurementCostReport] = useState(null);
   const [procurementCostReportLoading, setProcurementCostReportLoading] = useState(false);
+  const procurementCostReportRequestRef = useRef(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [receipt, setReceipt] = useState(null);
@@ -1906,14 +1907,24 @@ export default function PosTerminal() {
 
   const loadProcurementCostReport = useCallback(async () => {
     if (!locationId || !reportFrom || !reportTo || reportTo < reportFrom) return;
+    const requestId = ++procurementCostReportRequestRef.current;
     setProcurementCostReportLoading(true);
     setError("");
     try {
       const data = await apiRequest("/admin/procurement/cost-report?locationId=" + encodeURIComponent(locationId) + "&from=" + encodeURIComponent(reportFrom) + "&to=" + encodeURIComponent(reportTo));
-      setProcurementCostReport(data);
-    } catch (err) { setError(err.message); }
-    finally { setProcurementCostReportLoading(false); }
+      if (requestId === procurementCostReportRequestRef.current) setProcurementCostReport(data);
+    } catch (err) {
+      if (requestId === procurementCostReportRequestRef.current) setError(err.message);
+    } finally {
+      if (requestId === procurementCostReportRequestRef.current) setProcurementCostReportLoading(false);
+    }
   }, [locationId, reportFrom, reportTo]);
+
+  const invalidateProcurementCostReport = () => {
+    procurementCostReportRequestRef.current += 1;
+    setProcurementCostReport(null);
+    setProcurementCostReportLoading(false);
+  };
 
   const openVoidDialog = (sale) => {
     if (selectedSaleReturns === null) {
@@ -2718,7 +2729,7 @@ export default function PosTerminal() {
         </div>
         <div className="pos-topbar-right">
           <label className="pos-location-picker"><Store size={17} /><span>Store</span>
-            <select value={locationId} onChange={(e) => { setLocationId(e.target.value); setRegisterId(""); setShift(null); }} disabled={locationsLoading || !locations.length || retryPending}>
+            <select value={locationId} onChange={(e) => { invalidateProcurementCostReport(); setLocationId(e.target.value); setRegisterId(""); setShift(null); }} disabled={locationsLoading || !locations.length || retryPending}>
               {locations.length ? locations.map((location) => <option key={location.id} value={location.id}>{location.name} · {location.code}</option>) : <option value="">No location</option>}
             </select>
           </label>
@@ -2993,8 +3004,8 @@ export default function PosTerminal() {
               <button type="button" className="pos-button secondary compact" onClick={loadSalesReport} disabled={reportLoading}><RefreshCw size={15} className={reportLoading ? "pos-spin" : ""} /> Refresh</button>
             </div>
             <div className="pos-report-filters">
-              <label>From<input type="date" value={reportFrom} onChange={(event) => setReportFrom(event.target.value)} /></label>
-              <label>To<input type="date" value={reportTo} onChange={(event) => setReportTo(event.target.value)} /></label>
+              <label>From<input type="date" value={reportFrom} onChange={(event) => { invalidateProcurementCostReport(); setReportFrom(event.target.value); }} /></label>
+              <label>To<input type="date" value={reportTo} onChange={(event) => { invalidateProcurementCostReport(); setReportTo(event.target.value); }} /></label>
               <button type="button" className="pos-button primary" onClick={loadSalesReport} disabled={reportLoading || !reportFrom || !reportTo || reportTo < reportFrom}>Run report</button>
             </div>
             {reportLoading ? <div className="pos-empty-state"><RefreshCw className="pos-spin" /><span>Calculating report…</span></div>
