@@ -871,6 +871,21 @@
   color: #8a5a14;
   font-size: 12px;
 }
+.pos-supplier-payment-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid #e4e9ef;
+  border-radius: 9px;
+  background: #fff;
+}
+.pos-supplier-payment-history h5 { margin: 0; }
+.pos-supplier-payment-history > p {
+  margin: 0;
+  color: #718096;
+  font-size: 11px;
+}
 .pos-supplier-payment-form,
 .pos-supplier-landed-costs {
   display: grid;
