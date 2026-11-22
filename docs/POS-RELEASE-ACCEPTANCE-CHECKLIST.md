@@ -55,6 +55,15 @@ Do not mark a box complete without recording the date, tester, environment/build
 - [ ] Create a purchase order, receive it partially, refresh the page, and retry any uncertain operation with the exact same idempotency key and payload.
 - [ ] Process a supplier return and verify stock and movement history.
 
+## Security and staff authorization
+
+- [ ] Use direct API requests (not only hidden UI controls) to confirm CASHIER is denied sales history, returns, voids, exchanges, reports, inventory, procurement and manager shift history.
+- [ ] Confirm CASHIER can only view, add cash movements to and close their own shift; another cashier's shift is inaccessible. Confirm MANAGER/ADMIN can review and close another staff member's shift.
+- [ ] Confirm CASHIER cannot apply sale or exchange discounts, even when the request is sent directly to the API.
+- [ ] Confirm manager/admin sensitive actions (return, void, exchange, inventory receipt/adjustment, stock-count post/cancel, goods receipt, supplier return and PO submit) require a fresh password authorization for the exact action.
+- [ ] Confirm a sensitive-action authorization token cannot be reused, used by another account, used for a different action, or used after its two-minute expiry.
+- [ ] Disable a staff account after issuing its JWT; verify subsequent API requests with that token are rejected. Confirm role changes take effect on the next request.
+
 ## Reports and release evidence
 
 - [ ] Reconcile sales, discounts, refunds, exchanges, tender totals and shift cash against the underlying transactions.
@@ -65,7 +74,7 @@ Do not mark a box complete without recording the date, tester, environment/build
 
 ## Current release-gate count
 
-There are 35 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 35 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
+There are 41 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 41 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
 
 ## Known limitations
 
