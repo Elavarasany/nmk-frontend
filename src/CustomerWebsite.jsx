@@ -3319,7 +3319,7 @@ const cartTotal = cart.reduce(
     if (filteredProducts.length === 0) {
       return (
         <div className="grid-message">
-          <p>No matching products found.</p>
+          <p>{productsHasNext ? "No matches in the loaded pages. Load more to search the rest of the catalogue." : "No matching products found."}</p>
           {hasActiveFilters && (
             <button type="button" className="text-btn" onClick={resetFilters}>
               Clear filters
