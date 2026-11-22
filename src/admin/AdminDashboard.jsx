@@ -2843,7 +2843,7 @@ function OnlineRefundPanel({ order, api, onNotice, onReload }) {
 
       {order.paymentStatus !== "PAID" ? (
         <p className="od-muted">Only orders with a verified captured payment can be refunded.</p>
-      ) : remainingPaise < 100 ? (
+      ) : remainingPaise < 100 && !retryKey ? (
         <p className="od-muted">The full captured amount is already refunded or reserved by pending refunds.</p>
       ) : (
         <form className="od-courier-form" onSubmit={submitRefund} noValidate>
