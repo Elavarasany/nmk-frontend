@@ -4888,6 +4888,8 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
 function StaffManagementPage({ api, onNotice }) {
   const confirm = useConfirm();
   const [staff, setStaff] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [assignmentDrafts, setAssignmentDrafts] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -4897,8 +4899,24 @@ function StaffManagementPage({ api, onNotice }) {
     setLoading(true);
     setError("");
     try {
-      const data = await api.getJson(`${API_BASE_URL}/admin/staff`, "Unable to load staff accounts.");
-      setStaff(Array.isArray(data) ? data : []);
+      const [data, locationData] = await Promise.all([
+        api.getJson(`${API_BASE_URL}/admin/staff`, "Unable to load staff accounts."),
+        api.getJson(`${API_BASE_URL}/admin/pos/locations`, "Unable to load active locations for staff assignments."),
+      ]);
+      const accounts = Array.isArray(data) ? data : [];
+      const activeLocations = Array.isArray(locationData) ? locationData : [];
+      const assignmentRows = await Promise.all(accounts
+        .filter((account) => account.role !== "ADMIN")
+        .map(async (account) => {
+          const result = await api.getJson(
+            `${API_BASE_URL}/admin/staff/${account.id}/locations`,
+            `Unable to load location assignments for ${account.username}.`
+          );
+          return [account.id, Array.isArray(result?.locationIds) ? result.locationIds.map(Number) : []];
+        }));
+      setStaff(accounts);
+      setLocations(activeLocations);
+      setAssignmentDrafts(Object.fromEntries(assignmentRows));
     } catch (err) {
       setError(err.message || "Unable to load staff accounts.");
     } finally {
@@ -4965,6 +4983,29 @@ function StaffManagementPage({ api, onNotice }) {
       }
     } catch (err) {
       setError(err.message || "Unable to change staff role.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveLocationAssignments = async (account) => {
+    if (account.role === "ADMIN") return;
+    const locationIds = (assignmentDrafts[account.id] || []).map(Number);
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/locations`,
+        method: "PUT",
+        payload: { locationIds },
+        fallbackMessage: "Unable to save staff location assignments.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice(`Location access updated for ${account.username}.`);
+      }
+    } catch (err) {
+      setError(err.message || "Unable to save staff location assignments.");
     } finally {
       setSaving(false);
     }
@@ -5055,10 +5096,10 @@ function StaffManagementPage({ api, onNotice }) {
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table">
-            <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Username</th><th>Role</th><th>Location access</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody>
-              {loading ? <EmptyRow colSpan={5}>Loading staff accounts…</EmptyRow>
-                : staff.length === 0 ? <EmptyRow colSpan={5}>No staff accounts found.</EmptyRow>
+              {loading ? <EmptyRow colSpan={6}>Loading staff accounts…</EmptyRow>
+                : staff.length === 0 ? <EmptyRow colSpan={6}>No staff accounts found.</EmptyRow>
                   : staff.map((account) => (
                     <tr key={account.id}>
                       <td><strong>{account.username}</strong></td>
@@ -5070,6 +5111,39 @@ function StaffManagementPage({ api, onNotice }) {
                           <option value="MANAGER">Manager</option>
                           <option value="CASHIER">Cashier</option>
                         </select>
+                      </td>
+                      <td>
+                        {account.role === "ADMIN" ? (
+                          <span className="admin-help-text">All active locations</span>
+                        ) : (
+                          <div style={{ display: "grid", gap: 8, minWidth: 220 }}>
+                            <select
+                              aria-label={`Assigned locations for ${account.username}`}
+                              multiple
+                              size={Math.min(4, Math.max(2, locations.length))}
+                              value={(assignmentDrafts[account.id] || []).map(String)}
+                              disabled={saving || locations.length === 0}
+                              onChange={(event) => setAssignmentDrafts((current) => ({
+                                ...current,
+                                [account.id]: Array.from(event.target.selectedOptions, (option) => Number(option.value)),
+                              }))}
+                            >
+                              {locations.map((location) => (
+                                <option key={location.id} value={location.id}>
+                                  {location.code} · {location.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="admin-secondary-button"
+                              disabled={saving || locations.length === 0}
+                              onClick={() => saveLocationAssignments(account)}
+                            >
+                              Save locations
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td><span className={account.enabled ? "admin-status available" : "admin-status inactive"}>
                         {account.enabled ? "Active" : "Disabled"}
