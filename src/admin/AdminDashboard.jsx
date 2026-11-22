@@ -2809,8 +2809,8 @@ function SettlementReconciliationPage({ api }) {
   };
 
   return (
-    <section className="admin-page-section">
-      <div className="admin-page-header">
+    <section className="admin-content">
+      <div className="admin-page-heading">
         <div>
           <h2>Razorpay settlement reconciliation</h2>
           <p>Fetch provider settlement reports and match payment/refund rows against NMK orders.</p>
@@ -2828,7 +2828,7 @@ function SettlementReconciliationPage({ api }) {
           </div>
         </div>
         <div className="admin-form-grid" style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-          <label className="admin-form-field">
+          <label className="admin-form-group">
             <span>Year</span>
             <input type="number" min="2020" max={now.getFullYear()} value={year} onChange={(event) => setYear(event.target.value)} />
           </label>
