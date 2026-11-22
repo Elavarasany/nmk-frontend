@@ -751,7 +751,7 @@ function InventoryPanel({ locationId, catalog, onRefreshCatalog, onNotice, onErr
       await loadSupplierBills();
       onNotice(`Supplier bill ${created.invoiceNumber} posted. Outstanding: ${money(created.outstandingAmount)}.`);
     } catch (err) {
-      if (err.status === 400) {
+      if (err.status === 400 || (err.status === 409 && String(err.message || "").toLowerCase().includes("invoice number"))) {
         pendingSupplierBillRecord.current = null;
         setSupplierBillPayload(null);
         sessionStorage.removeItem("nmk.pos.pending-supplier-bill.v1");
