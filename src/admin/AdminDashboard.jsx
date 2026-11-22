@@ -2749,8 +2749,15 @@ function OnlineRefundPanel({ order, api, onNotice, onReload }) {
     event.preventDefault();
     if (busy) return;
 
-    const amountPaise = retryKey ? parseAmountPaise(amount) : parseAmountPaise(amount);
-    if (amountPaise == null || amountPaise < 100 || amountPaise > remainingPaise) {
+    const retryRecord = retryKey
+      ? refunds.find((refund) => refund.requestIdempotencyKey === retryKey && refund.status === "PENDING")
+      : null;
+    const amountPaise = retryKey && retryRecord
+      ? Number(retryRecord.amountPaise)
+      : parseAmountPaise(amount);
+    if (amountPaise == null || amountPaise < 100
+      || (!retryKey && amountPaise > remainingPaise)
+      || (retryKey && !retryRecord)) {
       setError("Enter a refund amount of at least ₹1.00 within the remaining refundable balance.");
       return;
     }
