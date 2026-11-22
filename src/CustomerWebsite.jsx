@@ -1222,7 +1222,7 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
 
     try {
       const imageAsset = await uploadPrescription(file);
-      setPrescription((prev) => ({ ...prev, imageAsset, imageName: file.name }));
+      setPrescription((prev) => ({ ...prev, imageAsset, imageName: imageAsset.imageName || file.name }));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
