@@ -1,0 +1,63 @@
+# POS Release Acceptance Checklist
+
+This checklist is for a disposable staging database and a real browser session. It is not a substitute for automated backend tests, provider settlement verification, accountant approval, or a production migration rehearsal.
+
+## Test environment
+
+- [ ] Use a disposable database with the same MySQL major/minor version and collation planned for production.
+- [ ] Apply the reviewed manual migrations in the documented order; record the migration version and backup/restore point.
+- [ ] Configure the frontend build with the staging API URL and configure backend CORS for the staging frontend origin.
+- [ ] Use separate ADMIN, MANAGER and CASHIER accounts. Confirm each account is active and has a unique password.
+- [ ] Create one active location, register, product and at least two active variants. Receive stock through the inventory API/UI; do not insert inventory balances directly with SQL.
+- [ ] Record starting on-hand, reserved and available quantities, cash float and all test IDs.
+
+## Cashier checkout
+
+- [ ] Sign in as CASHIER and open the assigned register shift with a counted opening float.
+- [ ] Search by product name, SKU and barcode; select the intended variant and verify the displayed available quantity.
+- [ ] Complete a cash sale where tendered cash exceeds the amount due. Verify change is correct and expected drawer cash increases by the payment amount, not by tendered cash.
+- [ ] Print the receipt, reload the page, find the sale in history and reprint it.
+- [ ] Attempt a UPI/card sale without a transaction reference. It must be blocked by the UI and rejected by the backend if the API is called directly.
+- [ ] Enter a test UTR/card-terminal reference and complete a non-cash sale. Confirm the reference is recorded. Do not interpret this as provider settlement verification.
+- [ ] Attempt to apply a discount as CASHIER through a direct API request. The backend must reject it.
+- [ ] Sign in as MANAGER/ADMIN and verify an authorized discount is accepted, bounded by the sale subtotal, and reflected consistently in receipt and report.
+
+## Retry and inventory contention
+
+- [ ] Simulate an uncertain checkout response after submitting a sale. Refresh the same browser tab and retry the unchanged request. Verify one sale and one stock movement exist.
+- [ ] Verify a changed payload cannot be submitted with the original idempotency key.
+- [ ] Race an online reservation and a POS sale for the final available unit. Exactly one operation must win; the other must fail for insufficient available stock. The committed balance must never become negative or oversold.
+- [ ] Verify a stock count freeze blocks POS sales, online reservations and other stock-changing operations until the count is posted or cancelled.
+
+## Returns, exchanges and cash drawer
+
+- [ ] Process a partial return. Verify returned quantities cannot exceed the remaining sold quantity.
+- [ ] Test RESTOCK, DAMAGED and DISCARD dispositions. Only RESTOCK may increase available inventory; damaged/discarded items require a reason.
+- [ ] Attempt to void a sale after a partial return. It must be rejected.
+- [ ] For a cash refund, verify expected drawer cash decreases by the refund amount. For UPI/card, verify the POS records the reference only and that the refund was independently completed and confirmed through the provider.
+- [ ] Complete an exchange with a positive balance due and one with a negative balance due. Verify only the positive difference is collected and the negative difference is recorded as a refund; verify stock dispositions and audit history.
+- [ ] Record cash-in and cash-out with reasons. Attempt cash-out greater than expected drawer cash; it must be rejected.
+- [ ] Close the shift using a counted cash amount. A variance must require an explanation and remain visible in manager review.
+
+## Manager inventory and procurement
+
+- [ ] Receive stock against the exact variant and location; verify the movement history and actor.
+- [ ] Apply a reasoned stock adjustment as MANAGER/ADMIN. Verify CASHIER cannot call the endpoint.
+- [ ] Start a physical count, enter and submit counts, then have a different manager/admin review and post it. Verify the location unlocks only after successful post/cancel.
+- [ ] Create a purchase order, receive it partially, refresh the page, and retry any uncertain operation with the exact same idempotency key and payload.
+- [ ] Process a supplier return and verify stock and movement history.
+
+## Reports and release evidence
+
+- [ ] Reconcile sales, discounts, refunds, exchanges, tender totals and shift cash against the underlying transactions.
+- [ ] Confirm refund reports distinguish recorded POS references from provider-confirmed refunds.
+- [ ] Confirm procurement reports are not treated as accounts payable, landed cost, inventory valuation, COGS or profit.
+- [ ] Export test evidence: screenshots, request/response IDs, sale/return/exchange IDs, stock movement IDs, closing cash variance, migration log and CI run links.
+- [ ] Obtain shop-owner approval for operating procedures and accountant approval for GST/HSN, tax treatment, receipt/invoice numbering and financial reporting before enabling statutory invoicing.
+
+## Known limitations
+
+- The frontend currently has build/lint checks but no configured browser E2E test runner. These browser scenarios must be executed and signed off manually until an E2E suite is added.
+- The POS does not execute UPI/card refunds or independently verify payment settlement.
+- GST calculations, statutory tax invoice snapshots and financial-year sequential invoice numbering are not implemented.
+- This checklist does not authorize migration or deployment to the client database.
