@@ -399,8 +399,9 @@ const makeLineId = () => `${Date.now().toString(36)}-${Math.random().toString(36
 const cartLineKey = (item) => item.lineId ?? `${item.id}:${item.variantId}`;
 
 // Reconcile saved lines against the latest variant-level stock and price from the catalogue.
-const reconcileCart = (items, catalogue) => {
+const reconcileCart = (items, catalogue, unavailableProductIds = []) => {
   const byId = new Map(catalogue.map((product) => [product.id, product]));
+  const unavailableIds = new Set(unavailableProductIds.map(Number));
   const usedByVariant = new Map();
   const merged = [];
   let removed = 0;
@@ -412,11 +413,22 @@ const reconcileCart = (items, catalogue) => {
     }
 
     const fresh = byId.get(Number(item.id));
-    const freshVariant = fresh?.variants.find(
+    if (!fresh) {
+      // A product absent from the current server page is not automatically unavailable.
+      // Keep it until its direct cart-reference lookup confirms a 404.
+      if (unavailableIds.has(Number(item.id))) {
+        removed += 1;
+      } else {
+        merged.push(item);
+      }
+      return;
+    }
+
+    const freshVariant = fresh.variants.find(
       (variant) => variant.id === Number(item.variantId)
     );
 
-    if (!fresh || !freshVariant || freshVariant.availableQuantity <= 0) {
+    if (!freshVariant || freshVariant.availableQuantity <= 0) {
       removed += 1;
       return;
     }
