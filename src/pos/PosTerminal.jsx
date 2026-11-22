@@ -2827,12 +2827,12 @@ export default function PosTerminal() {
                     <article><span>Subtotal</span><strong>{money(salesReport.subtotal)}</strong></article>
                     <article><span>Discounts</span><strong>{money(salesReport.discounts)}</strong></article>
                     <article><span>Sales after discount</span><strong>{money(salesReport.netSalesBeforeRefunds)}</strong></article>
-                    <article><span>Sales reversals</span><strong>{money(salesReport.salesReversals ?? salesReport.refunds)}</strong></article>
+                    <article><span>Full void reversals</span><strong>{money(salesReport.salesReversals ?? 0)}</strong></article>
                     <article><span>Recorded refund allocations</span><strong>{money(salesReport.recordedRefundPayments ?? salesReport.refunds)}</strong></article>
                     <article><span>Exchange credit applied</span><strong>{money(salesReport.exchangeCreditApplied ?? 0)}</strong></article>
-                    <article><span>Net after reversals</span><strong>{money(salesReport.netSalesAfterRefunds)}</strong></article>
+                    <article><span>Net after returns and voids</span><strong>{money(salesReport.netSalesAfterRefunds)}</strong></article>
                   </div>
-                  <p className="pos-report-note">UPI/card refund amounts are recorded references, not provider-confirmed settlements. Refunds are grouped by the date processed; sales reversals include completed returns and voids. Exchange credit is reported separately and is not a cash or payment-provider refund.</p>
+                  <p className="pos-report-note">UPI/card refund amounts are recorded references, not provider-confirmed settlements. Refunds are grouped by the date processed; full-sale reversals include completed voids only; ordinary customer returns are included in refunds but not full-sale reversals. Exchange credit is reported separately and is not a cash or payment-provider refund.</p>
                   <div className="pos-report-grid">
                     <section><h3>Sales by payment method</h3>
                       {Object.keys(salesReport.salesByPaymentMethod || {}).length ? Object.entries(salesReport.salesByPaymentMethod).map(([method, total]) => <div className="pos-report-row" key={method}><span>{method}</span><strong>{money(total)}</strong></div>) : <p>No sales tenders.</p>}
