@@ -5177,6 +5177,8 @@ function AdminAuditLogPage({ api }) {
   const [pageInfo, setPageInfo] = useState({ totalElements: 0, totalPages: 0, first: true, last: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [integrity, setIntegrity] = useState(null);
+  const [integrityError, setIntegrityError] = useState("");
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -5193,6 +5195,17 @@ function AdminAuditLogPage({ api }) {
         first: Boolean(result?.first),
         last: Boolean(result?.last),
       });
+      try {
+        const check = await api.getJson(
+          `${API_BASE_URL}/admin/audit/events/integrity`,
+          "Unable to verify audit-chain integrity."
+        );
+        setIntegrity(check);
+        setIntegrityError("");
+      } catch (integrityFailure) {
+        setIntegrity(null);
+        setIntegrityError(integrityFailure.message || "Audit-chain integrity could not be checked.");
+      }
     } catch (err) {
       setError(err.message || "Unable to load the admin audit log.");
       setEvents([]);
@@ -5219,6 +5232,24 @@ function AdminAuditLogPage({ api }) {
         action={<RefreshButton onClick={loadEvents} loading={loading} />}
       />
       <ErrorMessage>{error}</ErrorMessage>
+      <div className="admin-table-card" style={{ marginBottom: 16 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Audit-chain integrity</h3>
+            <p>
+              {integrity
+                ? `${Number(integrity.checkedEvents || 0).toLocaleString("en-IN")} events checked`
+                : integrityError || "Integrity status has not been checked."}
+            </p>
+            {integrity?.failureReason && (
+              <p style={{ color: "var(--admin-danger, #b42318)" }}>{integrity.failureReason}</p>
+            )}
+          </div>
+          <span className={integrity?.valid ? "admin-status available" : "admin-status inactive"}>
+            {integrity?.valid ? "Chain verified" : "Not verified"}
+          </span>
+        </div>
+      </div>
       <div className="admin-table-card">
         <div className="admin-table-heading">
           <div>
