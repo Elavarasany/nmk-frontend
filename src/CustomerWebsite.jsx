@@ -793,8 +793,6 @@ function ProductCard({
    Power type -> lens -> prescription -> review, then add to cart.
 ========================= */
 
-const CLOUDINARY_CLOUD = "ydkweahp";
-const CLOUDINARY_PRESET = "nmk_opticals";
 const PRESCRIPTION_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const PRESCRIPTION_MAX_SIZE = 5 * 1024 * 1024;
 
@@ -893,7 +891,7 @@ const EMPTY_PRESCRIPTION = {
   hasCylinder: true,
   right: EMPTY_EYE,
   left: EMPTY_EYE,
-  imageUrl: "",
+  imageAsset: null,
   imageName: "",
   consent: false,
 };
@@ -919,7 +917,7 @@ const isAxisValid = (value) => /^\d+$/.test(String(value)) && Number(value) >= 0
 // Returns an error message, or "" when the prescription is complete
 const prescriptionProblem = (rx, addition) => {
   if (rx.mode === "image") {
-    if (!rx.imageUrl) return "Please upload your prescription image or PDF.";
+    if (!rx.imageAsset?.publicId) return "Please upload your prescription image or PDF.";
   } else {
     const eyes = rx.sameForBothEyes ? ["right"] : ["right", "left"];
 
@@ -952,7 +950,7 @@ const cleanEye = (row, hasCylinder, addition) => ({
 
 const buildPrescriptionPayload = (rx, addition) =>
   rx.mode === "image"
-    ? { mode: "image", imageUrl: rx.imageUrl }
+    ? { mode: "image", ...rx.imageAsset }
     : {
         mode: "manual",
         sameForBothEyes: rx.sameForBothEyes,
@@ -962,16 +960,14 @@ const buildPrescriptionPayload = (rx, addition) =>
         left: cleanEye(rx.sameForBothEyes ? rx.right : rx.left, rx.hasCylinder, addition),
       };
 
-// Uploads a prescription image or PDF to the store's storage and returns its URL
+// Uploads through the backend, which validates the file and stores it as a private asset.
 const uploadPrescription = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_PRESET);
-  formData.append("folder", "nmk-prescriptions");
 
   let response;
   try {
-    response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`, {
+    response = await fetch(`${API_BASE}/prescriptions/upload`, {
       method: "POST",
       body: formData,
     });
@@ -980,10 +976,10 @@ const uploadPrescription = async (file) => {
   }
 
   const data = await readJson(response);
-  if (!response.ok || !data.secure_url) {
-    throw new Error(data.error?.message || "Prescription upload failed. Please try again.");
+  if (!response.ok || !data.publicId || !data.signature) {
+    throw new Error(data.message || "Prescription upload failed. Please try again.");
   }
-  return data.secure_url;
+  return data;
 };
 
 function LensTypeIllustration({ type }) {
@@ -1225,8 +1221,8 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
     setUploading(true);
 
     try {
-      const imageUrl = await uploadPrescription(file);
-      setPrescription((prev) => ({ ...prev, imageUrl, imageName: file.name }));
+      const imageAsset = await uploadPrescription(file);
+      setPrescription((prev) => ({ ...prev, imageAsset, imageName: file.name }));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
