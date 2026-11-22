@@ -2,6 +2,14 @@
 
 This checklist is for a disposable staging database and a real browser session. It is not a substitute for automated backend tests, provider settlement verification, accountant approval, or a production migration rehearsal.
 
+## Execution status and evidence rules
+
+All unchecked boxes below are **manual release-acceptance checks**. They have not been executed in a real browser against a disposable staging environment as part of repository review. A backend unit/integration test or CI pass is not a substitute for checking the complete cashier workflow, receipt rendering, browser refresh recovery, real staff accounts, or operational sign-off.
+
+Automated coverage exists for selected backend behaviors, including checkout validation/idempotency, MySQL stock contention, return pricing/concurrency, exchange settlement, shift cash calculations, stock-count service rules, procurement idempotency, authorization and report date grouping. Coverage is not exhaustive; use the test suite and CI run links as supporting evidence, not as a claim that every box below passed. The frontend currently has no configured browser E2E runner.
+
+Do not mark a box complete without recording the date, tester, environment/build, test IDs and evidence. Mark a failed or blocked check explicitly; do not silently skip it.
+
 ## Test environment
 
 - [ ] Use a disposable database with the same MySQL major/minor version and collation planned for production.
@@ -13,10 +21,10 @@ This checklist is for a disposable staging database and a real browser session. 
 
 ## Cashier checkout
 
-- [ ] Sign in as CASHIER and open the assigned register shift with a counted opening float.
+- [ ] Sign in as CASHIER and open the available MAIN register shift with a counted opening float. Register-to-staff assignment is not implemented; this check does not validate register assignment controls.
 - [ ] Search by product name, SKU and barcode; select the intended variant and verify the displayed available quantity.
 - [ ] Complete a cash sale where tendered cash exceeds the amount due. Verify change is correct and expected drawer cash increases by the payment amount, not by tendered cash.
-- [ ] Print the receipt, reload the page, find the sale in history and reprint it.
+- [ ] Print the POS receipt (not a statutory GST invoice), reload the page, find the sale in history and reprint it.
 - [ ] Attempt a UPI/card sale without a transaction reference. It must be blocked by the UI and rejected by the backend if the API is called directly.
 - [ ] Enter a test UTR/card-terminal reference and complete a non-cash sale. Confirm the reference is recorded. Do not interpret this as provider settlement verification.
 - [ ] Attempt to apply a discount as CASHIER through a direct API request. The backend must reject it.
@@ -27,7 +35,7 @@ This checklist is for a disposable staging database and a real browser session. 
 - [ ] Simulate an uncertain checkout response after submitting a sale. Refresh the same browser tab and retry the unchanged request. Verify one sale and one stock movement exist.
 - [ ] Verify a changed payload cannot be submitted with the original idempotency key.
 - [ ] Race an online reservation and a POS sale for the final available unit. Exactly one operation must win; the other must fail for insufficient available stock. The committed balance must never become negative or oversold.
-- [ ] Verify a stock count freeze blocks POS sales, online reservations and other stock-changing operations until the count is posted or cancelled.
+- [ ] Verify a stock count freeze blocks POS sales, online reservations, receipts, adjustments, returns/exchanges and other stock-changing operations until the count is posted or cancelled. Verify posting is rejected if the poster started, submitted or counted any line in that session; a different manager/admin must post it.
 
 ## Returns, exchanges and cash drawer
 
@@ -54,6 +62,10 @@ This checklist is for a disposable staging database and a real browser session. 
 - [ ] Confirm procurement reports are not treated as accounts payable, landed cost, inventory valuation, COGS or profit.
 - [ ] Export test evidence: screenshots, request/response IDs, sale/return/exchange IDs, stock movement IDs, closing cash variance, migration log and CI run links.
 - [ ] Obtain shop-owner approval for operating procedures and accountant approval for GST/HSN, tax treatment, receipt/invoice numbering and financial reporting before enabling statutory invoicing.
+
+## Current release-gate count
+
+There are 35 unchecked manual acceptance items in the sections above. Repository review and automated tests do not complete these checks. Treat all 35 as pending until a tester records actual staging/browser evidence. In addition, the separate production gates below (client database rehearsal, opening-stock reconciliation, accountant approval, provider/bank reconciliation, HTTPS/CORS and owner sign-off) must be completed before production use.
 
 ## Known limitations
 
