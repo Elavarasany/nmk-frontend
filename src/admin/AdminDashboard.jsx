@@ -31,6 +31,7 @@ import {
   Info,
   Clock,
   ShieldCheck,
+  History,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
@@ -87,6 +88,7 @@ const MENU_ITEMS = [
   { name: "Appointments", icon: CalendarDays },
   { name: "Customers", icon: Users },
   { name: "Staff", icon: ShieldCheck },
+  { name: "Audit Log", icon: History },
   { name: "Marketing", icon: Megaphone },
   { name: "Settings", icon: Settings },
 ];
@@ -5169,6 +5171,121 @@ function StaffManagementPage({ api, onNotice }) {
   );
 }
 
+function AdminAuditLogPage({ api }) {
+  const [events, setEvents] = useState([]);
+  const [page, setPage] = useState(0);
+  const [pageInfo, setPageInfo] = useState({ totalElements: 0, totalPages: 0, first: true, last: true });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.getJson(
+        `${API_BASE_URL}/admin/audit/events?page=${page}&size=50`,
+        "Unable to load the admin audit log."
+      );
+      setEvents(Array.isArray(result?.content) ? result.content : []);
+      setPageInfo({
+        totalElements: Number(result?.totalElements || 0),
+        totalPages: Number(result?.totalPages || 0),
+        first: Boolean(result?.first),
+        last: Boolean(result?.last),
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load the admin audit log.");
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, page]);
+
+  useEffect(() => { loadEvents(); }, [loadEvents]);
+
+  const formatTimestamp = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "—"
+      : date.toLocaleString("en-IN", { timeZone: TIME_ZONE, dateStyle: "medium", timeStyle: "medium" });
+  };
+
+  return (
+    <section className="admin-content">
+      <PageHeading
+        title="Admin audit log"
+        description="Review recorded administrator and staff mutations, response outcomes and request metadata."
+        action={<RefreshButton onClick={loadEvents} loading={loading} />}
+      />
+      <ErrorMessage>{error}</ErrorMessage>
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Recorded mutations</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} events · newest first · 50 per page</p>
+          </div>
+          <span className="admin-help-text">Times shown in India Standard Time</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Time</th><th>Actor</th><th>Authorities</th><th>Action</th>
+                <th>Resource</th><th>Result</th><th>Remote address</th><th>Request ID</th><th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={9}>Loading audit events…</EmptyRow>
+                : events.length === 0 ? <EmptyRow colSpan={9}>No audit events found.</EmptyRow>
+                  : events.map((event) => (
+                    <tr key={event.id}>
+                      <td style={{ whiteSpace: "nowrap" }}>{formatTimestamp(event.createdAt)}</td>
+                      <td><strong>{event.actorUsername || "Unauthenticated"}</strong></td>
+                      <td>{event.actorAuthorities || "—"}</td>
+                      <td>
+                        <strong>{event.httpMethod}</strong>
+                        <div className="admin-help-text">HTTP {event.responseStatus}</div>
+                      </td>
+                      <td style={{ minWidth: 240, maxWidth: 420, overflowWrap: "anywhere" }}>{event.requestPath}</td>
+                      <td>
+                        <span className={event.outcome === "SUCCESS" ? "admin-status available" : "admin-status inactive"}>
+                          {event.outcome || "UNKNOWN"}
+                        </span>
+                      </td>
+                      <td>{event.remoteAddress || "—"}</td>
+                      <td style={{ maxWidth: 180, overflowWrap: "anywhere" }}>{event.requestId || "—"}</td>
+                      <td style={{ maxWidth: 220, overflowWrap: "anywhere" }}>{event.errorType || "—"}</td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">
+            Page {pageInfo.totalPages === 0 ? 0 : page + 1} of {pageInfo.totalPages}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button"
+              disabled={loading || pageInfo.first || page === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}>
+              Previous
+            </button>
+            <button type="button" className="admin-secondary-button"
+              disabled={loading || pageInfo.last || page + 1 >= pageInfo.totalPages}
+              onClick={() => setPage((current) => current + 1)}>
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        The current audit trail records completed admin API mutations and selected request metadata. It does not capture every request rejected before the MVC layer and is not yet tamper-evident or a substitute for external backups.
+      </p>
+    </section>
+  );
+}
+
 /* =========================
    ROOT COMPONENT
    Owns the session, shared data, navigation, notices, preferences and confirmations.
@@ -5417,6 +5534,8 @@ export default function AdminDashboard() {
         );
       case "Staff":
         return isAdmin ? <StaffManagementPage api={api} onNotice={setNotice} /> : null;
+      case "Audit Log":
+        return isAdmin ? <AdminAuditLogPage api={api} /> : null;
       case "Settings":
         return (
           <SettingsPage
@@ -5460,7 +5579,7 @@ export default function AdminDashboard() {
             <div className="admin-menu-label">MAIN MENU</div>
 
             <nav className="admin-navigation" aria-label="Admin">
-              {MENU_ITEMS.filter((item) => item.name !== "Staff" || isAdmin).map((item) => {
+              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log"].includes(item.name) || isAdmin).map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.name;
 
