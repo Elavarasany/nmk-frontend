@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
+  Store,
   CalendarDays,
   Users,
   Megaphone,
@@ -29,6 +30,10 @@ import {
   Printer,
   Info,
   Clock,
+  ShieldCheck,
+  History,
+  Landmark,
+  ShieldAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./Admin.css";
@@ -37,7 +42,7 @@ import "./Admin.css";
    CONSTANTS
 ========================= */
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || (import.meta.env.DEV ? "http://localhost:8080/api" : "");
 
 const ENDPOINTS = {
   products: `${API_BASE_URL}/admin/products`,
@@ -47,6 +52,8 @@ const ENDPOINTS = {
   banners: `${API_BASE_URL}/admin/marketing/banners`,
   offers: `${API_BASE_URL}/admin/marketing/offers`,
   websiteImages: `${API_BASE_URL}/admin/website-images`,
+  settlements: `${API_BASE_URL}/admin/pos/payments/settlements`,
+  disputes: `${API_BASE_URL}/admin/pos/payments/disputes`,
 };
 
 const LIST_SOURCES = {
@@ -79,10 +86,15 @@ const MARKETING_MODAL = {
 
 const MENU_ITEMS = [
   { name: "Dashboard", icon: LayoutDashboard },
+  { name: "POS Terminal", icon: Store },
   { name: "Products", icon: Package },
   { name: "Orders", icon: ShoppingCart },
+  { name: "Payment Settlements", icon: Landmark },
+  { name: "Payment Disputes", icon: ShieldAlert },
   { name: "Appointments", icon: CalendarDays },
   { name: "Customers", icon: Users },
+  { name: "Staff", icon: ShieldCheck },
+  { name: "Audit Log", icon: History },
   { name: "Marketing", icon: Megaphone },
   { name: "Settings", icon: Settings },
 ];
@@ -766,6 +778,7 @@ map: (p) => {
       pincode: o.pincode,
       totalAmount: o.totalAmount,
       paymentStatus: o.paymentStatus,
+      refundStatus: o.refundStatus || "NONE",
       orderStatus: o.orderStatus,
     }),
   },
@@ -904,10 +917,14 @@ function useAdminApi(token, onSessionEnded) {
       method,
       payload,
       fallbackMessage,
+      authorizationToken,
     }) => {
       const response = await authFetch(url, {
         method,
-        headers: JSON_HEADERS,
+        headers: {
+          ...JSON_HEADERS,
+          ...(authorizationToken ? { "X-Admin-Action-Authorization": authorizationToken } : {}),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -918,6 +935,27 @@ function useAdminApi(token, onSessionEnded) {
       }
 
       return true;
+    };
+
+    const postJson = async (url, payload, authorizationToken, fallbackMessage) => {
+      const response = await authFetch(url, {
+        method: "POST",
+        headers: {
+          ...JSON_HEADERS,
+          ...(authorizationToken ? { "X-Admin-Action-Authorization": authorizationToken } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response) return null;
+      let data = {};
+      try { data = await response.json(); } catch { /* empty provider response */ }
+      if (!response.ok) {
+        const error = new Error(data.message || fallbackMessage || "Request failed.");
+        error.status = response.status;
+        throw error;
+      }
+      return data;
     };
 
     const deleteRecord = async (
@@ -1008,6 +1046,7 @@ function useAdminApi(token, onSessionEnded) {
 
     return {
       saveRecord,
+      postJson,
       deleteRecord,
       getJson,
       verifyPassword,
@@ -1582,7 +1621,7 @@ function DashboardPage({ api, products, orders, appointments, refreshing, onRefr
                 <th scope="col">Product</th>
                 <th scope="col">Category</th>
                 <th scope="col">Price</th>
-                <th scope="col">Stock</th>
+                <th scope="col">Legacy stock</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -1773,7 +1812,7 @@ function SpecField({ field, value, onChange }) {
 }
 
 
-function ProductsPage({ api, products, loading, onReload, onNotice }) {
+function ProductsPage({ api, products, pageInfo, loading, onReload, onLoadMore, onNotice }) {
   const csvInputRef = useRef(null);
 const [importingCsv, setImportingCsv] = useState(false);
   const prefs = usePrefs();
@@ -1992,9 +2031,16 @@ const handleProductCsvImport = async (e) => {
       try {
         const id = row.id?.trim();
 
-        const existingProduct = id
+        let existingProduct = id
           ? products.find((p) => String(p.id) === id)
           : null;
+
+        if (id && !existingProduct) {
+          existingProduct = await api.getJson(
+            `${ENDPOINTS.products}/${encodeURIComponent(id)}`,
+            `Product ID ${id} could not be loaded.`
+          );
+        }
 
         if (id && !existingProduct) {
           throw new Error(`Product ID ${id} does not exist.`);
@@ -2123,9 +2169,9 @@ const handleProductCsvImport = async (e) => {
   const deleteProduct = async (product) => {
     if (prefs.confirmProductDelete) {
       const ok = await confirm({
-        title: "Delete product",
-        message: `Delete "${getProductTitle(product)}"? This cannot be undone.`,
-        confirmLabel: "Yes, delete",
+        title: "Deactivate product",
+        message: `Remove "${getProductTitle(product)}" from the active catalogue? Inventory and sales history will be retained. You can reactivate it later.`,
+        confirmLabel: "Deactivate",
         danger: true,
       });
       if (!ok) return;
@@ -2134,7 +2180,7 @@ const handleProductCsvImport = async (e) => {
     runRowAction(product.id, async () => {
       const deleted = await api.deleteRecord(`${ENDPOINTS.products}/${product.id}`, "Unable to delete product");
       if (deleted) {
-        onNotice("Product deleted.");
+        onNotice("Product deactivated. Inventory and sales history were retained.");
         await onReload();
       }
     });
@@ -2197,7 +2243,7 @@ const handleProductCsvImport = async (e) => {
 
       <div className="admin-product-toolbar">
         <span aria-live="polite">
-          {visibleProducts.length} of {products.length} products
+          {visibleProducts.length} shown · {products.length} loaded of {pageInfo?.totalElements ?? products.length} products
         </span>
       </div>
 
@@ -2243,7 +2289,7 @@ const handleProductCsvImport = async (e) => {
                     {formatINR(product.price, true)}
                   </td>
 
-                  <td data-label="Stock">
+                  <td data-label="Legacy stock">
                     {product.stockQuantity ?? 0}
                   </td>
 
@@ -2280,8 +2326,8 @@ const handleProductCsvImport = async (e) => {
   className="admin-clear-button"
   onClick={() => deleteProduct(product)}
   disabled={rowBusyId === product.id}
-  title="Delete product"
-  aria-label="Delete product"
+  title="Deactivate product"
+  aria-label="Deactivate product"
 >
   <Trash2 size={16} aria-hidden="true" />
 </button>
@@ -2293,6 +2339,14 @@ const handleProductCsvImport = async (e) => {
           </table>
         </div>
       </div>
+
+      {!pageInfo?.last && (
+        <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+          <button type="button" className="admin-secondary-button" disabled={loading} onClick={onLoadMore}>
+            {loading ? "Loading..." : "Load more products"}
+          </button>
+        </div>
+      )}
 
       {modal && (
 
@@ -2352,7 +2406,7 @@ const handleProductCsvImport = async (e) => {
                 />
               </FormGroup>
 
-              <FormGroup id="product-stock" label="Stock Quantity" required>
+              <FormGroup id="product-stock" label="Legacy Stock Quantity (not used for POS availability)" required>
                 <input
                   id="product-stock"
                   type="number"
@@ -2361,7 +2415,7 @@ const handleProductCsvImport = async (e) => {
                   step="1"
                   value={form.stockQuantity}
                   onChange={handleChange}
-                  placeholder="Enter stock quantity"
+                  placeholder="Legacy product field only"
                   required
                 />
               </FormGroup>
@@ -2526,8 +2580,36 @@ const RX_FIELDS = [
 // Prescription the customer entered for one item. Shown only when the order record includes it;
 // otherwise the admin sees that the values were not recorded.
 
-function PrescriptionBlock({ item }) {
+function PrescriptionBlock({ item, api, orderId }) {
   const rx = item.prescription;
+  const [secureUrl, setSecureUrl] = useState("");
+  const [secureError, setSecureError] = useState("");
+  const [loadingSecureUrl, setLoadingSecureUrl] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!rx || rx.mode !== "image") {
+      setSecureUrl("");
+      return () => { active = false; };
+    }
+    if (!rx.publicId) {
+      setSecureUrl(rx.imageUrl || "");
+      return () => { active = false; };
+    }
+    setLoadingSecureUrl(true);
+    setSecureError("");
+    api.getJson(
+      `${ENDPOINTS.orders}/${orderId}/items/${item.id}/prescription`,
+      "Unable to open prescription"
+    ).then((data) => {
+      if (active) setSecureUrl(data?.url || "");
+    }).catch((error) => {
+      if (active) setSecureError(error.message || "Unable to open prescription.");
+    }).finally(() => {
+      if (active) setLoadingSecureUrl(false);
+    });
+    return () => { active = false; };
+  }, [api.getJson, item.id, orderId, rx?.mode, rx?.publicId, rx?.imageUrl]);
 
   if (!rx) {
     return (
@@ -2538,51 +2620,34 @@ function PrescriptionBlock({ item }) {
     );
   }
 
-  // Uploaded prescription image or PDF.
   if (rx.mode === "image") {
-    const isPdf =
-      /\.pdf(\?|$)/i.test(rx.imageUrl || "") ||
-      /\.pdf$/i.test(rx.imageName || "");
-
+    const url = secureUrl;
+    const isPdf = /\.pdf$/i.test(rx.format || "") || /\.pdf$/i.test(rx.imageName || "");
     return (
       <div className="order-rx-image">
-        <p className="order-detail-main">
-          {item.productName}: uploaded prescription
-        </p>
-
-        {!rx.imageUrl && (
-          <p className="order-detail-small">
-            The file link was not saved for this order.
-          </p>
+        <p className="order-detail-main">{item.productName}: uploaded prescription</p>
+        {loadingSecureUrl && <p className="order-detail-small">Preparing secure file access…</p>}
+        {secureError && <p className="order-detail-small" role="alert">{secureError}</p>}
+        {!loadingSecureUrl && !secureError && !url && (
+          <p className="order-detail-small">The prescription file is not available.</p>
         )}
-
-        {rx.imageUrl && !isPdf && (
-          <a
-            href={rx.imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="order-rx-thumb"
-          >
-            <img
-              src={rx.imageUrl}
-              alt={`Prescription for ${item.productName}`}
-              loading="lazy"
-            />
+        {url && !isPdf && (
+          <a href={url} target="_blank" rel="noreferrer" className="order-rx-thumb">
+            <img src={url} alt={`Prescription for ${item.productName}`} loading="lazy" />
           </a>
         )}
-
-        {rx.imageUrl && (
+        {url && (
           <p>
-            <a href={rx.imageUrl} target="_blank" rel="noreferrer">
+            <a href={url} target="_blank" rel="noreferrer">
               {rx.imageName || "Open prescription file"}
             </a>
+            {rx.publicId && <span className="order-detail-small"> · Secure link expires in 5 minutes</span>}
           </p>
         )}
       </div>
     );
   }
 
-  // Contact lens prescription.
   if (rx.mode === "contact") {
     const contactFields = [
       { key: "sph", label: "SPH" },
@@ -2590,90 +2655,648 @@ function PrescriptionBlock({ item }) {
       { key: "axis", label: "Axis" },
       { key: "boxes", label: "Boxes" },
     ];
-
     return (
       <div className="order-rx-block">
-        <p className="order-detail-main">
-          {item.productName}: contact lens prescription
-        </p>
-
+        <p className="order-detail-main">{item.productName}: contact lens prescription</p>
         <table className="admin-table order-items-table">
-          <thead>
-            <tr>
-              <th scope="col">Power</th>
-              <th scope="col">Right eye</th>
-              <th scope="col">Left eye</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {contactFields.map((field) => (
-              <tr key={field.key}>
-                <td>{field.label}</td>
-                <td>{rx.right?.[field.key] || "–"}</td>
-                <td>{rx.left?.[field.key] || "–"}</td>
-              </tr>
-            ))}
-          </tbody>
+          <thead><tr><th scope="col">Power</th><th scope="col">Right eye</th><th scope="col">Left eye</th></tr></thead>
+          <tbody>{contactFields.map((field) => (
+            <tr key={field.key}><td>{field.label}</td><td>{rx.right?.[field.key] || "–"}</td><td>{rx.left?.[field.key] || "–"}</td></tr>
+          ))}</tbody>
         </table>
       </div>
     );
   }
 
-  // Eyeglasses manual prescription.
   const sameForBoth = Boolean(rx.sameForBothEyes);
   const hasAddition = [rx.right, rx.left].some((row) => row?.add);
-
   const fields = RX_FIELDS.filter((field) => {
-    if (field.key === "cyl" || field.key === "axis") {
-      return Boolean(rx.hasCylinder);
-    }
-
-    if (field.key === "add") {
-      return hasAddition;
-    }
-
+    if (field.key === "cyl" || field.key === "axis") return Boolean(rx.hasCylinder);
+    if (field.key === "add") return hasAddition;
     return true;
   });
-
   return (
     <div className="order-rx-block">
       <p className="order-detail-main">
         {item.productName}
-        {sameForBoth && (
-          <span className="order-detail-small">
-            {" "}· Same power for both eyes
-          </span>
-        )}
+        {sameForBoth && <span className="order-detail-small"> · Same power for both eyes</span>}
       </p>
-
       <table className="admin-table order-items-table">
-        <thead>
-          <tr>
-            <th scope="col">Power</th>
-            <th scope="col">Right eye</th>
-            {!sameForBoth && (
-              <th scope="col">Left eye</th>
-            )}
-          </tr>
-        </thead>
-
-        <tbody>
-          {fields.map((field) => (
-            <tr key={field.key}>
-              <td>{field.label}</td>
-              <td>{rx.right?.[field.key] || "–"}</td>
-              {!sameForBoth && (
-                <td>{rx.left?.[field.key] || "–"}</td>
-              )}
-            </tr>
-          ))}
-        </tbody>
+        <thead><tr><th scope="col">Power</th><th scope="col">Right eye</th>{!sameForBoth && <th scope="col">Left eye</th>}</tr></thead>
+        <tbody>{fields.map((field) => (
+          <tr key={field.key}><td>{field.label}</td><td>{rx.right?.[field.key] || "–"}</td>{!sameForBoth && <td>{rx.left?.[field.key] || "–"}</td>}</tr>
+        ))}</tbody>
       </table>
     </div>
   );
 }
 
+function SettlementReconciliationPage({ api }) {
+  const now = new Date();
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [day, setDay] = useState("");
+  const [settlements, setSettlements] = useState([]);
+  const [pageInfo, setPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, first: true, last: true });
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [entriesPageInfo, setEntriesPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [entriesLoading, setEntriesLoading] = useState(false);
+
+  const loadSettlements = useCallback(async (page = 0) => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}?page=${page}&size=50`,
+        "Unable to load Razorpay settlements"
+      );
+      setSettlements(Array.isArray(data?.content) ? data.content : []);
+      setPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        first: Boolean(data?.first),
+        last: Boolean(data?.last),
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to load Razorpay settlements");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson]);
+
+  useEffect(() => {
+    loadSettlements(0);
+  }, [loadSettlements]);
+
+  const syncSettlements = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setError("");
+    setNotice("");
+    try {
+      const params = new URLSearchParams({ year, month });
+      if (day) params.set("day", day);
+      const result = await api.postJson(
+        `${ENDPOINTS.settlements}/sync?${params.toString()}`,
+        {},
+        null,
+        "Unable to synchronize Razorpay settlements"
+      );
+      if (!result) return;
+      setNotice(result.message || "Razorpay settlement report synchronized.");
+      setSelected(null);
+      setEntries([]);
+      await loadSettlements(0);
+    } catch (err) {
+      setError(err.message || "Unable to synchronize Razorpay settlements");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const viewEntries = async (settlement) => {
+    setSelected(settlement);
+    setEntriesLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}/${settlement.id}/entries?page=0&size=100`,
+        "Unable to load settlement entries"
+      );
+      setEntries(Array.isArray(data?.content) ? data.content : []);
+      setEntriesPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        last: Boolean(data?.last),
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load settlement entries");
+    } finally {
+      setEntriesLoading(false);
+    }
+  };
+
+  const loadMoreEntries = async () => {
+    if (!selected || entriesLoading || entriesPageInfo.last) return;
+    setEntriesLoading(true);
+    try {
+      const nextPage = entriesPageInfo.number + 1;
+      const data = await api.getJson(
+        `${ENDPOINTS.settlements}/${selected.id}/entries?page=${nextPage}&size=100`,
+        "Unable to load more settlement entries"
+      );
+      setEntries((current) => [...current, ...(Array.isArray(data?.content) ? data.content : [])]);
+      setEntriesPageInfo({
+        number: Number(data?.number || nextPage),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        last: Boolean(data?.last),
+      });
+    } catch (err) {
+      setError(err.message || "Unable to load more settlement entries");
+    } finally {
+      setEntriesLoading(false);
+    }
+  };
+
+  const statusClass = (status) => {
+    if (status === "PROVIDER_RECONCILED" || status === "MATCHED") return "available";
+    if (status === "FAILED" || status === "REVIEW_REQUIRED" || status === "MISMATCH" || status === "UNMATCHED" || status === "MANUAL_REVIEW") return "inactive";
+    return "pending";
+  };
+
+  return (
+    <section className="admin-content">
+      <div className="admin-section-header">
+        <div>
+          <h2>Razorpay settlement reconciliation</h2>
+          <p>Fetch provider settlement reports and match payment/refund rows against NMK orders.</p>
+        </div>
+        <button type="button" className="admin-secondary-button" onClick={() => loadSettlements(0)} disabled={loading || syncing}>
+          <RefreshCw size={16} aria-hidden="true" /> Refresh
+        </button>
+      </div>
+
+      <div className="admin-table-card" style={{ marginBottom: 16 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Synchronize provider report</h3>
+            <p>Choose a month or a single day. The sync is read-only against Razorpay.</p>
+          </div>
+        </div>
+        <div className="admin-form-grid" style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+          <label className="admin-form-group">
+            <span>Year</span>
+            <input type="number" min="2020" max={now.getFullYear()} value={year} onChange={(event) => setYear(event.target.value)} />
+          </label>
+          <label className="admin-form-field">
+            <span>Month</span>
+            <select value={month} onChange={(event) => setMonth(event.target.value)}>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
+                <option key={value} value={value}>{String(value).padStart(2, "0")}</option>
+              ))}
+            </select>
+          </label>
+          <label className="admin-form-field">
+            <span>Day (optional)</span>
+            <input type="number" min="1" max="31" placeholder="Whole month" value={day} onChange={(event) => setDay(event.target.value)} />
+          </label>
+          <div style={{ display: "flex", alignItems: "end" }}>
+            <button type="button" className="admin-primary-button" onClick={syncSettlements} disabled={syncing || loading || !year || !month}>
+              {syncing ? "Synchronizing…" : "Sync Razorpay report"}
+            </button>
+          </div>
+        </div>
+        {notice && <p className="admin-success-message" role="status" style={{ margin: "0 16px 16px" }}>{notice}</p>}
+        {error && <p className="admin-error-message" role="alert" style={{ margin: "0 16px 16px" }}>{error}</p>}
+      </div>
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Settlement batches</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} batches · newest first</p>
+          </div>
+          <span className="admin-help-text">Provider report records only</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Settlement / date</th><th>Provider status</th><th>Net amount</th>
+                <th>Fees</th><th>Tax</th><th>UTR</th><th>Provider reconciliation</th><th>Rows</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={9}>Loading settlement batches…</EmptyRow>
+                : settlements.length === 0 ? <EmptyRow colSpan={9}>No settlement batches imported yet. Synchronize a report above.</EmptyRow>
+                  : settlements.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong>{item.providerSettlementId}</strong>
+                        <div className="admin-help-text">{formatDateTime(item.providerCreatedAt)}</div>
+                      </td>
+                      <td><span className="admin-status">{item.status}</span></td>
+                      <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.feesPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.taxPaise || 0) / 100, true)}</td>
+                      <td className="od-mono">{item.utr || "—"}</td>
+                      <td><span className={`admin-status ${statusClass(item.reconciliationStatus)}`}>{item.reconciliationStatus}</span></td>
+                      <td>
+                        {Number(item.matchedEntries || 0)} / {Number(item.totalEntries || 0)} matched
+                        {Number(item.unmatchedEntries || 0) + Number(item.manualReviewEntries || 0) + Number(item.pendingEntries || 0) > 0 && (
+                          <div className="admin-help-text">
+                            {Number(item.unmatchedEntries || 0)} unmatched · {Number(item.manualReviewEntries || 0)} review · {Number(item.pendingEntries || 0)} pending
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <button type="button" className="admin-secondary-button" onClick={() => viewEntries(item)}>
+                          View rows
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">Page {pageInfo.totalPages === 0 ? 0 : pageInfo.number + 1} of {pageInfo.totalPages}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.first || pageInfo.number === 0} onClick={() => loadSettlements(pageInfo.number - 1)}>Previous</button>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.last} onClick={() => loadSettlements(pageInfo.number + 1)}>Next</button>
+          </div>
+        </div>
+      </div>
+
+      {selected && (
+        <div className="admin-table-card" style={{ marginTop: 16 }}>
+          <div className="admin-table-heading">
+            <div>
+              <h3>Settlement rows · {selected.providerSettlementId}</h3>
+              <p>{selected.utr || "No UTR returned"} · {entriesPageInfo.totalElements.toLocaleString("en-IN")} provider entries</p>
+            </div>
+            <button type="button" className="admin-secondary-button" onClick={() => { setSelected(null); setEntries([]); }}>Close</button>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Type / entity</th><th>Order / payment</th><th>Amount</th><th>Debit</th><th>Credit</th><th>Fee + tax</th><th>Match</th></tr>
+              </thead>
+              <tbody>
+                {entriesLoading && entries.length === 0 ? <EmptyRow colSpan={7}>Loading settlement rows…</EmptyRow>
+                  : entries.length === 0 ? <EmptyRow colSpan={7}>No entries found for this settlement.</EmptyRow>
+                    : entries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td><strong>{entry.entryType}</strong><div className="admin-help-text od-mono">{entry.providerEntityId}</div></td>
+                        <td><div>{entry.orderId || "—"}</div><div className="admin-help-text od-mono">{entry.paymentId || "—"}</div>{entry.localDisputeId && <div className="admin-help-text">Dispute #{entry.localDisputeId}</div>}</td>
+                        <td>{formatINR(Number(entry.amountPaise || 0) / 100, true)}</td>
+                        <td>{formatINR(Number(entry.debitPaise || 0) / 100, true)}</td>
+                        <td>{formatINR(Number(entry.creditPaise || 0) / 100, true)}</td>
+                        <td>{formatINR((Number(entry.feePaise || 0) + Number(entry.taxPaise || 0)) / 100, true)}</td>
+                        <td><span className={`admin-status ${statusClass(entry.matchStatus)}`}>{entry.matchStatus}</span><div className="admin-help-text">{entry.matchMessage}</div></td>
+                      </tr>
+                    ))}
+              </tbody>
+            </table>
+          </div>
+          {!entriesPageInfo.last && (
+            <div style={{ padding: 12, textAlign: "center" }}>
+              <button type="button" className="admin-secondary-button" disabled={entriesLoading} onClick={loadMoreEntries}>
+                {entriesLoading ? "Loading…" : "Load more rows"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        “Provider reconciled” means Razorpay’s settlement totals and payment/refund entries match the local order/refund ledgers. It does not confirm that the UTR credit appears in the shop’s bank statement. Bank-statement matching is a separate step and requires the client’s bank statement format.
+      </p>
+    </section>
+  );
+}
+
+function PaymentDisputesPage({ api }) {
+  const [disputes, setDisputes] = useState([]);
+  const [pageInfo, setPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, first: true, last: true });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadDisputes = useCallback(async (page = 0) => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.disputes}?page=${page}&size=50`,
+        "Unable to load Razorpay disputes"
+      );
+      setDisputes(Array.isArray(data?.content) ? data.content : []);
+      setPageInfo({
+        number: Number(data?.number || 0),
+        totalPages: Number(data?.totalPages || 0),
+        totalElements: Number(data?.totalElements || 0),
+        first: Boolean(data?.first),
+        last: Boolean(data?.last),
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to load Razorpay disputes");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson]);
+
+  useEffect(() => {
+    loadDisputes(0);
+  }, [loadDisputes]);
+
+  const statusClass = (status) => {
+    if (status === "WON" || status === "MATCHED") return "available";
+    if (status === "LOST" || status === "ACTION_REQUIRED" || status === "UNMATCHED" || status === "MISMATCH" || status === "MANUAL_REVIEW") return "inactive";
+    return "pending";
+  };
+
+  return (
+    <section className="admin-content">
+      <div className="admin-section-header">
+        <div>
+          <h2>Razorpay payment disputes</h2>
+          <p>Track chargeback status, response deadlines and disputed amounts from signed provider webhooks.</p>
+        </div>
+        <button type="button" className="admin-secondary-button" onClick={() => loadDisputes(0)} disabled={loading}>
+          <RefreshCw size={16} aria-hidden="true" /> Refresh
+        </button>
+      </div>
+
+      {error && <p className="admin-error-message" role="alert">{error}</p>}
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Dispute ledger</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} disputes · response deadlines first</p>
+          </div>
+          <span className="admin-help-text">Webhook-driven · no automatic order or stock changes</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Dispute / payment</th><th>Local order</th><th>Disputed amount</th>
+                <th>Amount deducted</th><th>Reason</th><th>Phase / status</th>
+                <th>Respond by</th><th>Local match</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={8}>Loading disputes…</EmptyRow>
+                : disputes.length === 0 ? <EmptyRow colSpan={8}>No Razorpay disputes received yet.</EmptyRow>
+                  : disputes.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <strong className="od-mono">{item.providerDisputeId}</strong>
+                        <div className="admin-help-text od-mono">{item.providerPaymentId}</div>
+                      </td>
+                      <td>{item.localOrderId ? `#${item.localOrderId}` : "Unmatched"}</td>
+                      <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
+                      <td>{formatINR(Number(item.amountDeductedPaise || 0) / 100, true)}</td>
+                      <td>
+                        <strong>{item.reasonCode || "—"}</strong>
+                        <div className="admin-help-text">{item.reasonDescription || "No provider description"}</div>
+                      </td>
+                      <td>
+                        <span className={`admin-status ${statusClass(item.status)}`}>{item.status}</span>
+                        <div className="admin-help-text">{item.phase || "—"}</div>
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {item.respondBy ? formatDateTime(item.respondBy) : "—"}
+                        {item.status === "ACTION_REQUIRED" && <div className="admin-help-text">Action required in Razorpay</div>}
+                      </td>
+                      <td>
+                        <span className={`admin-status ${statusClass(item.matchStatus)}`}>{item.matchStatus}</span>
+                        <div className="admin-help-text">{item.matchMessage}</div>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">Page {pageInfo.totalPages === 0 ? 0 : pageInfo.number + 1} of {pageInfo.totalPages}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.first || pageInfo.number === 0} onClick={() => loadDisputes(pageInfo.number - 1)}>Previous</button>
+            <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.last} onClick={() => loadDisputes(pageInfo.number + 1)}>Next</button>
+          </div>
+        </div>
+      </div>
+
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        Dispute status and deadlines are updated from signed Razorpay webhooks. Evidence submission and accept/contest decisions must be handled in Razorpay Dashboard. This screen does not submit evidence, change dispute outcomes, cancel orders or adjust inventory.
+      </p>
+    </section>
+  );
+}
+
+function OnlineRefundPanel({ order, api, onNotice, onReload }) {
+  const [refunds, setRefunds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
+  const [retryKey, setRetryKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadRefunds = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getJson(
+        `${ENDPOINTS.orders}/${order.id}/refunds`,
+        "Unable to load refund history"
+      );
+      const rows = Array.isArray(data) ? data : [];
+      setRefunds(rows);
+      setLoadError("");
+      const unresolved = rows.find((refund) =>
+        refund.status === "PENDING" && !refund.razorpayRefundId && refund.requestIdempotencyKey
+      );
+      if (unresolved) {
+        setRetryKey(unresolved.requestIdempotencyKey);
+        setAmount((Number(unresolved.amountPaise) / 100).toFixed(2));
+        setReason(unresolved.reason || "");
+      } else {
+        setRetryKey("");
+      }
+    } catch (err) {
+      setLoadError(err.message || "Unable to load refund history");
+    } finally {
+      setLoading(false);
+    }
+  }, [api.getJson, order.id]);
+
+  useEffect(() => {
+    loadRefunds();
+  }, [loadRefunds]);
+
+  const activeRefundPaise = refunds
+    .filter((refund) => ["PENDING", "PROCESSED"].includes(refund.status))
+    .reduce((total, refund) => total + Number(refund.amountPaise || 0), 0);
+  const totalPaise = Math.round(Number(order.totalAmount || 0) * 100);
+  const remainingPaise = Math.max(0, totalPaise - activeRefundPaise);
+  const pendingProvider = refunds.some((refund) => refund.status === "PENDING");
+  const canInitiate = order.paymentStatus === "PAID"
+    && remainingPaise >= 100
+    && !pendingProvider
+    && !busy;
+
+  const parseAmountPaise = (value) => {
+    const match = String(value || "").trim().match(/^(\d{1,10})(?:\.(\d{1,2}))?$/);
+    if (!match) return null;
+    const paise = Number(match[1]) * 100 + Number((match[2] || "").padEnd(2, "0"));
+    return Number.isSafeInteger(paise) ? paise : null;
+  };
+
+  const submitRefund = async (event) => {
+    event.preventDefault();
+    if (busy) return;
+
+    const retryRecord = retryKey
+      ? refunds.find((refund) => refund.requestIdempotencyKey === retryKey && refund.status === "PENDING")
+      : null;
+    const amountPaise = retryKey && retryRecord
+      ? Number(retryRecord.amountPaise)
+      : parseAmountPaise(amount);
+    if (amountPaise == null || amountPaise < 100
+      || (!retryKey && amountPaise > remainingPaise)
+      || (retryKey && !retryRecord)) {
+      setError("Enter a refund amount of at least ₹1.00 within the remaining refundable balance.");
+      return;
+    }
+    if (!reason.trim() || reason.trim().length > 255) {
+      setError("Enter a reason of up to 255 characters.");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Enter your admin password to authorize this financial action.");
+      return;
+    }
+
+    const idempotencyKey = retryKey || crypto.randomUUID().replace(/-/g, "");
+    setBusy(true);
+    setError("");
+    try {
+      const authorizationToken = await api.authorizeAction(password, "RAZORPAY_REFUND");
+      const result = await api.postJson(
+        `${ENDPOINTS.orders}/${order.id}/refunds`,
+        { amountPaise, reason: reason.trim(), idempotencyKey },
+        authorizationToken,
+        "Unable to initiate Razorpay refund"
+      );
+      if (!result) return;
+
+      setPassword("");
+      setRetryKey(result.retryWithSameKey ? idempotencyKey : "");
+      onNotice(result.message || "Refund request submitted.");
+      await loadRefunds();
+      await onReload();
+    } catch (err) {
+      setError(err.message || "Unable to initiate refund.");
+      if (err.status && err.status >= 400 && err.status < 500 && err.status !== 409) {
+        setRetryKey("");
+      }
+      await loadRefunds();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="od-card" aria-labelledby={`od-${order.id}-refunds`}>
+      <div className="od-section-head">
+        <div>
+          <h3 id={`od-${order.id}-refunds`}>Razorpay refunds</h3>
+          <p className="od-muted">Normal-speed full or partial refunds. Admin password required for every request.</p>
+        </div>
+        <span className="admin-status">{formatINR(remainingPaise / 100, true)} remaining</span>
+      </div>
+
+      {loading ? (
+        <p className="od-muted">Loading refund history…</p>
+      ) : loadError ? (
+        <p className="od-warning" role="alert">{loadError}</p>
+      ) : refunds.length === 0 ? (
+        <p className="od-muted">No Razorpay refunds have been recorded for this order.</p>
+      ) : (
+        <div className="admin-table-scroll">
+          <table className="admin-table od-items-table">
+            <thead>
+              <tr><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Razorpay refund ID</th><th scope="col">Reason</th></tr>
+            </thead>
+            <tbody>
+              {refunds.map((refund) => (
+                <tr key={refund.id}>
+                  <td><span className={`admin-status ${refund.status === "FAILED" ? "inactive" : "available"}`}>{refund.status}</span></td>
+                  <td>{formatINR(Number(refund.amountPaise || 0) / 100, true)}</td>
+                  <td className="od-mono">{refund.razorpayRefundId || "Awaiting provider confirmation"}</td>
+                  <td>{refund.reason || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pendingProvider && !retryKey && (
+        <div className="od-warning" role="note">
+          A refund is still pending at Razorpay. Wait for its webhook status before starting another refund.
+        </div>
+      )}
+
+      {order.paymentStatus !== "PAID" ? (
+        <p className="od-muted">Only orders with a verified captured payment can be refunded.</p>
+      ) : remainingPaise < 100 && !retryKey ? (
+        <p className="od-muted">The full captured amount is already refunded or reserved by pending refunds.</p>
+      ) : (
+        <form className="od-courier-form" onSubmit={submitRefund} noValidate>
+          {retryKey && (
+            <div className="od-warning" role="note">
+              The previous provider response was uncertain. Retry this exact request with the same idempotency key; do not create a new refund request.
+            </div>
+          )}
+          <FormGroup id={`refund-amount-${order.id}`} label="Refund amount (₹)">
+            <input
+              id={`refund-amount-${order.id}`}
+              type="number"
+              min="1"
+              max={(remainingPaise / 100).toFixed(2)}
+              step="0.01"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              disabled={!canInitiate || Boolean(retryKey)}
+            />
+          </FormGroup>
+          <FormGroup id={`refund-reason-${order.id}`} label="Reason">
+            <input
+              id={`refund-reason-${order.id}`}
+              type="text"
+              maxLength={255}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Reason for refund"
+              disabled={!canInitiate || Boolean(retryKey)}
+            />
+          </FormGroup>
+          <FormGroup id={`refund-password-${order.id}`} label="Admin password">
+            <input
+              id={`refund-password-${order.id}`}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Re-enter admin password"
+              disabled={busy}
+            />
+          </FormGroup>
+          <ErrorMessage>{error}</ErrorMessage>
+          <div className="od-actions-right">
+            <button type="submit" className="od-primary-btn" disabled={(!canInitiate && !retryKey) || busy}>
+              {busy ? "Submitting…" : retryKey ? "Retry same refund request" : "Initiate normal refund"}
+            </button>
+          </div>
+          <p className="od-muted">
+            Refunds do not automatically cancel the order or restore stock. Reconcile inventory separately after the refund is confirmed.
+          </p>
+        </form>
+      )}
+    </section>
+  );
+}
 
 function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   const { busyId, error: statusError, update } = useStatusUpdater({
@@ -2840,6 +3463,10 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
             </div>
             <dl className="od-kv">
               <div>
+                <dt>Refund status</dt>
+                <dd>{order.refundStatus || "NONE"}</dd>
+              </div>
+              <div>
                 <dt>Payment ID</dt>
                 <dd className="od-mono">{order.razorpayPaymentId || "Not available"}</dd>
               </div>
@@ -2850,6 +3477,8 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
             </dl>
           </section>
         </div>
+
+        <OnlineRefundPanel order={order} api={api} onNotice={onNotice} onReload={onReload} />
 
         <section className="od-card" aria-labelledby={`od-${order.id}-items`}>
           <div className="od-section-head">
@@ -2964,7 +3593,7 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
 
             {items.length === 0 && <p className="od-muted">No items recorded for this order.</p>}
             {items.map((item) => (
-              <PrescriptionBlock key={item.id ?? `${item.productId}-rx`} item={item} />
+              <PrescriptionBlock key={item.id ?? `${item.productId}-rx`} item={item} api={api} orderId={order.id} />
             ))}
           </section>
 
@@ -3089,7 +3718,7 @@ function OrderDetailsDialog({ api, order, onClose, onNotice, onReload }) {
   );
 }
 
-function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
+function OrdersPage({ api, orders, pageInfo, loading, loadError, onReload, onLoadMore, onNotice }) {
   const [search, setSearch] = useState("");
   const [range, setRange] = useState(EMPTY_RANGE);
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -3176,7 +3805,7 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
         </select>
 
         <span aria-live="polite">
-          {visibleOrders.length} of {orders.length} orders
+          {visibleOrders.length} shown · {orders.length} loaded of {pageInfo?.totalElements ?? orders.length} orders
         </span>
       </div>
 
@@ -3238,6 +3867,9 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
                         <span className={`admin-status ${paid ? "available" : "inactive"}`}>
                           {order.paymentStatus || "PENDING"}
                         </span>
+                        {order.refundStatus && order.refundStatus !== "NONE" && (
+                          <small className="order-cell-sub">Refund: {order.refundStatus}</small>
+                        )}
                       </td>
 
                       <td data-label="Status">
@@ -3278,6 +3910,19 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
         </div>
       </div>
 
+      {!pageInfo?.last && (
+        <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={loading}
+            onClick={onLoadMore}
+          >
+            {loading ? "Loading..." : "Load more orders"}
+          </button>
+        </div>
+      )}
+
       {selectedOrder && (
         <OrderDetailsDialog
           key={selectedOrder.id}
@@ -3298,7 +3943,7 @@ function OrdersPage({ api, orders, loading, loadError, onReload, onNotice }) {
    APPOINTMENTS
 ========================= */
 
-function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
+function AppointmentsPage({ api, appointments, pageInfo, loading, onReload, onLoadMore, onNotice }) {
   const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -3314,12 +3959,12 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
   });
 
   const counts = useMemo(() => {
-    const result = { total: appointments.length };
+    const result = { total: Number(pageInfo?.totalElements ?? appointments.length) };
     APPOINTMENT_STATUSES.forEach((s) => {
       result[s.value] = appointments.filter((a) => a.status === s.value).length;
     });
     return result;
-  }, [appointments]);
+  }, [appointments, pageInfo?.totalElements]);
 
   const visibleAppointments = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -3378,7 +4023,7 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
       <div className="admin-stats-grid">
         <StatCard label="Total Appointments" value={counts.total} />
         {APPOINTMENT_STATUSES.map((s) => (
-          <StatCard key={s.value} label={s.label} value={counts[s.value]} />
+          <StatCard key={s.value} label={`${s.label} (loaded)`} value={counts[s.value]} />
         ))}
       </div>
 
@@ -3409,7 +4054,7 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
           ))}
         </select>
 
-        <span aria-live="polite">{visibleAppointments.length} appointments displayed</span>
+        <span aria-live="polite">{visibleAppointments.length} shown · {appointments.length} loaded of {pageInfo?.totalElements ?? appointments.length}</span>
       </div>
 
       {loading ? (
@@ -3497,6 +4142,19 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
         </div>
       )}
 
+      {!pageInfo?.last && (
+        <div className="admin-load-more">
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={loading}
+            onClick={onLoadMore}
+          >
+            {loading ? "Loading..." : "Load more appointments"}
+          </button>
+        </div>
+      )}
+
       <ClearDataPopup bulk={bulk} />
     </section>
   );
@@ -3506,9 +4164,13 @@ function AppointmentsPage({ api, appointments, loading, onReload, onNotice }) {
    CUSTOMERS
 ========================= */
 
-function CustomersPage({ orders, customers, loading, onReload }) {
+function CustomersPage({ api, customers, pageInfo, loading, onReload, onLoadMore }) {
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState(null);
+  const [historyOrders, setHistoryOrders] = useState([]);
+  const [historyPageInfo, setHistoryPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   const selected = useMemo(
     () => customers.find((c) => customerKey(c) === selectedKey) ?? null,
@@ -3520,15 +4182,74 @@ function CustomersPage({ orders, customers, loading, onReload }) {
     return customers.filter((c) => matchesTerm(term, c.customerName, c.email, c.phone));
   }, [customers, search]);
 
-  const selectedOrders = useMemo(() => {
-    if (!selected) return [];
+  useEffect(() => {
+    if (!selected) {
+      setHistoryOrders([]);
+      setHistoryPageInfo({ number: 0, totalPages: 0, totalElements: 0, last: true });
+      setHistoryError("");
+      setHistoryLoading(false);
+      return undefined;
+    }
 
-    return orders.filter((order) =>
-      selected.email
-        ? order.email?.trim().toLowerCase() === selected.email.trim().toLowerCase()
-        : order.phone === selected.phone
-    );
-  }, [orders, selected]);
+    let active = true;
+    const params = new URLSearchParams({ page: "0", size: "25" });
+    if (selected.email?.trim()) params.set("email", selected.email.trim());
+    else if (selected.phone?.trim()) params.set("phone", selected.phone.trim());
+
+    setHistoryOrders([]);
+    setHistoryPageInfo({ number: 0, totalPages: 0, totalElements: 0, last: true });
+    setHistoryLoading(true);
+    setHistoryError("");
+
+    api.getJson(`${ENDPOINTS.customers}/history?${params.toString()}`, "Unable to load this customer's order history")
+      .then((data) => {
+        if (!active || !data) return;
+        setHistoryOrders(Array.isArray(data.content) ? data.content : []);
+        setHistoryPageInfo({
+          number: Number(data.number || 0),
+          totalPages: Number(data.totalPages || 0),
+          totalElements: Number(data.totalElements || 0),
+          last: Boolean(data.last),
+        });
+      })
+      .catch((err) => {
+        if (active) setHistoryError(err.message || "Unable to load this customer's order history");
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [api, selected?.email, selected?.phone, selectedKey]);
+
+  const loadMoreHistory = async () => {
+    if (!selected || historyLoading || historyPageInfo.last) return;
+    const nextPage = historyPageInfo.number + 1;
+    const params = new URLSearchParams({ page: String(nextPage), size: "25" });
+    if (selected.email?.trim()) params.set("email", selected.email.trim());
+    else if (selected.phone?.trim()) params.set("phone", selected.phone.trim());
+
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const data = await api.getJson(`${ENDPOINTS.customers}/history?${params.toString()}`, "Unable to load more customer orders");
+      if (!data) return;
+      setHistoryOrders((previous) => [
+        ...previous,
+        ...(Array.isArray(data.content) ? data.content.filter((order) => !previous.some((existing) => existing.id === order.id)) : []),
+      ]);
+      setHistoryPageInfo({
+        number: Number(data.number || nextPage),
+        totalPages: Number(data.totalPages || 0),
+        totalElements: Number(data.totalElements || 0),
+        last: Boolean(data.last),
+      });
+    } catch (err) {
+      setHistoryError(err.message || "Unable to load more customer orders");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const totals = useMemo(
     () => ({
@@ -3547,9 +4268,9 @@ function CustomersPage({ orders, customers, loading, onReload }) {
       />
 
       <div className="admin-stats-grid">
-        <StatCard label="Total Customers" value={customers.length} />
-        <StatCard label="Total Customer Orders" value={totals.orders} />
-        <StatCard label="Total Customer Spending" value={formatINR(totals.spent, true)} />
+        <StatCard label="Total Customers" value={pageInfo?.totalElements ?? customers.length} />
+        <StatCard label="Loaded Customer Orders" value={totals.orders} />
+        <StatCard label="Loaded Customer Spending" value={formatINR(totals.spent, true)} />
       </div>
 
       <div className="admin-product-toolbar">
@@ -3559,6 +4280,9 @@ function CustomersPage({ orders, customers, loading, onReload }) {
           value={search}
           onChange={setSearch}
         />
+        <span aria-live="polite">
+          {visibleCustomers.length} shown · {customers.length} loaded of {pageInfo?.totalElements ?? customers.length} customers
+        </span>
       </div>
 
       {loading ? (
@@ -3614,6 +4338,14 @@ function CustomersPage({ orders, customers, loading, onReload }) {
             </table>
           </div>
 
+          {!pageInfo?.last && (
+            <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+              <button type="button" className="admin-secondary-button" disabled={loading} onClick={onLoadMore}>
+                {loading ? "Loading..." : "Load more customers"}
+              </button>
+            </div>
+          )}
+
           {selected && (
             <div className="customer-history">
               <div className="admin-section-header">
@@ -3630,8 +4362,15 @@ function CustomersPage({ orders, customers, loading, onReload }) {
               </div>
 
               <h3>Order History</h3>
+              <p className="admin-help-text">
+                {historyOrders.length} loaded of {historyPageInfo.totalElements} orders for this customer.
+              </p>
 
-              {selectedOrders.length === 0 ? (
+              {historyLoading && historyOrders.length === 0 ? (
+                <p className="admin-loading">Loading customer order history...</p>
+              ) : historyError && historyOrders.length === 0 ? (
+                <p className="admin-error" role="alert">{historyError}</p>
+              ) : historyOrders.length === 0 ? (
                 <p>No orders found for this customer.</p>
               ) : (
                 <div className="admin-table-wrapper">
@@ -3647,7 +4386,7 @@ function CustomersPage({ orders, customers, loading, onReload }) {
                     </thead>
 
                     <tbody>
-                      {selectedOrders.map((order) => (
+                      {historyOrders.map((order) => (
                         <tr key={order.id}>
                           <td>#{order.id}</td>
                           <td>{formatDate(order.orderDate)}</td>
@@ -3658,6 +4397,18 @@ function CustomersPage({ orders, customers, loading, onReload }) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {historyError && historyOrders.length > 0 && (
+                <p className="admin-error" role="alert">{historyError}</p>
+              )}
+
+              {!historyPageInfo.last && (
+                <div className="admin-load-more" style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                  <button type="button" className="admin-secondary-button" disabled={historyLoading} onClick={loadMoreHistory}>
+                    {historyLoading ? "Loading..." : "Load more customer orders"}
+                  </button>
                 </div>
               )}
             </div>
@@ -4881,6 +5632,436 @@ function SettingsPage({ prefs, onSavePrefs, onResetPrefs, products, orders, appo
   );
 }
 
+function StaffManagementPage({ api, onNotice }) {
+  const confirm = useConfirm();
+  const [staff, setStaff] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [assignmentDrafts, setAssignmentDrafts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({ username: "", password: "", role: "CASHIER" });
+
+  const loadStaff = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [data, locationData] = await Promise.all([
+        api.getJson(`${API_BASE_URL}/admin/staff`, "Unable to load staff accounts."),
+        api.getJson(`${API_BASE_URL}/admin/pos/locations`, "Unable to load active locations for staff assignments."),
+      ]);
+      const accounts = Array.isArray(data) ? data : [];
+      const activeLocations = Array.isArray(locationData) ? locationData : [];
+      const assignmentRows = await Promise.all(accounts
+        .filter((account) => account.role !== "ADMIN")
+        .map(async (account) => {
+          const result = await api.getJson(
+            `${API_BASE_URL}/admin/staff/${account.id}/locations`,
+            `Unable to load location assignments for ${account.username}.`
+          );
+          return [account.id, Array.isArray(result?.locationIds) ? result.locationIds.map(Number) : []];
+        }));
+      setStaff(accounts);
+      setLocations(activeLocations);
+      setAssignmentDrafts(Object.fromEntries(assignmentRows));
+    } catch (err) {
+      setError(err.message || "Unable to load staff accounts.");
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+
+  const createStaff = async (event) => {
+    event.preventDefault();
+    const username = form.username.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,50}$/.test(username)) {
+      setError("Username must be 3–50 characters and use only letters, numbers, dots, underscores or hyphens.");
+      return;
+    }
+    if (form.password.length < 12 || new TextEncoder().encode(form.password).length > 72) {
+      setError("Password must be at least 12 characters and no more than 72 UTF-8 bytes.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff`,
+        method: "POST",
+        payload: { username, password: form.password, role: form.role },
+        fallbackMessage: "Unable to create staff account.",
+      });
+      if (saved) {
+        setForm({ username: "", password: "", role: "CASHIER" });
+        await loadStaff();
+        onNotice("Staff account created.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to create staff account.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeRole = async (account, role) => {
+    if (role === account.role) return;
+    const approved = await confirm({
+      title: "Change staff role",
+      message: `Change ${account.username} from ${account.role} to ${role}?`,
+      confirmLabel: "Change role",
+    });
+    if (!approved) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/role`,
+        method: "PATCH",
+        payload: { role },
+        fallbackMessage: "Unable to change staff role.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice("Staff role updated.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to change staff role.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveLocationAssignments = async (account) => {
+    if (account.role === "ADMIN") return;
+    const locationIds = (assignmentDrafts[account.id] || []).map(Number);
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/locations`,
+        method: "PUT",
+        payload: { locationIds },
+        fallbackMessage: "Unable to save staff location assignments.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice(`Location access updated for ${account.username}.`);
+      }
+    } catch (err) {
+      setError(err.message || "Unable to save staff location assignments.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeStatus = async (account) => {
+    const enabled = !account.enabled;
+    const approved = await confirm({
+      title: enabled ? "Enable staff account" : "Disable staff account",
+      message: enabled
+        ? `Allow ${account.username} to sign in again?`
+        : `Disable ${account.username}? Their existing JWT will stop working immediately.`,
+      confirmLabel: enabled ? "Enable account" : "Disable account",
+      danger: !enabled,
+    });
+    if (!approved) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveRecord({
+        url: `${API_BASE_URL}/admin/staff/${account.id}/status`,
+        method: "PATCH",
+        payload: { enabled },
+        fallbackMessage: "Unable to update staff status.",
+      });
+      if (saved) {
+        await loadStaff();
+        onNotice(enabled ? "Staff account enabled." : "Staff account disabled.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to update staff status.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="admin-content">
+      <PageHeading
+        title="Staff & permissions"
+        description="Create cashier and manager logins. Existing administrator accounts remain administrators."
+        action={<RefreshButton onClick={loadStaff} loading={loading} />}
+      />
+      <ErrorMessage>{error}</ErrorMessage>
+
+      <div className="admin-table-card" style={{ marginBottom: 22 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Create staff account</h3>
+            <p>Passwords are stored as BCrypt hashes and are never shown again.</p>
+          </div>
+        </div>
+        <form className="admin-form-grid" style={{ padding: "0 22px 22px" }} onSubmit={createStaff}>
+          <FormGroup id="staff-username" label="Username" required>
+            <input id="staff-username" autoComplete="off" value={form.username}
+              onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
+              maxLength={50} required />
+          </FormGroup>
+          <FormGroup id="staff-password" label="Temporary password (12+ characters)" required>
+            <input id="staff-password" type="password" autoComplete="new-password"
+              value={form.password}
+              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+              minLength={12} required />
+          </FormGroup>
+          <FormGroup id="staff-role" label="Role" required>
+            <select id="staff-role" value={form.role}
+              onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
+              <option value="CASHIER">Cashier</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Administrator</option>
+            </select>
+          </FormGroup>
+          <div className="admin-form-actions">
+            <button type="submit" className="admin-primary-button" disabled={saving}>
+              {saving ? "Saving…" : "Create account"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Staff accounts</h3>
+            <p>{staff.length} account{staff.length === 1 ? "" : "s"} · disabled accounts cannot use existing tokens</p>
+          </div>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Location access</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={6}>Loading staff accounts…</EmptyRow>
+                : staff.length === 0 ? <EmptyRow colSpan={6}>No staff accounts found.</EmptyRow>
+                  : staff.map((account) => (
+                    <tr key={account.id}>
+                      <td><strong>{account.username}</strong></td>
+                      <td>
+                        <select aria-label={`Role for ${account.username}`} value={account.role}
+                          disabled={saving || account.username === sessionStorage.getItem("adminUsername")}
+                          onChange={(event) => changeRole(account, event.target.value)}>
+                          <option value="ADMIN">Administrator</option>
+                          <option value="MANAGER">Manager</option>
+                          <option value="CASHIER">Cashier</option>
+                        </select>
+                      </td>
+                      <td>
+                        {account.role === "ADMIN" ? (
+                          <span className="admin-help-text">All active locations</span>
+                        ) : (
+                          <div style={{ display: "grid", gap: 8, minWidth: 220 }}>
+                            <select
+                              aria-label={`Assigned locations for ${account.username}`}
+                              multiple
+                              size={Math.min(4, Math.max(2, locations.length))}
+                              value={(assignmentDrafts[account.id] || []).map(String)}
+                              disabled={saving || locations.length === 0}
+                              onChange={(event) => setAssignmentDrafts((current) => ({
+                                ...current,
+                                [account.id]: Array.from(event.target.selectedOptions, (option) => Number(option.value)),
+                              }))}
+                            >
+                              {locations.map((location) => (
+                                <option key={location.id} value={location.id}>
+                                  {location.code} · {location.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="admin-secondary-button"
+                              disabled={saving || locations.length === 0}
+                              onClick={() => saveLocationAssignments(account)}
+                            >
+                              Save locations
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td><span className={account.enabled ? "admin-status available" : "admin-status inactive"}>
+                        {account.enabled ? "Active" : "Disabled"}
+                      </span></td>
+                      <td>{formatDate(account.createdAt)}</td>
+                      <td>
+                        <button type="button" className="admin-secondary-button"
+                          disabled={saving || account.username === sessionStorage.getItem("adminUsername")}
+                          onClick={() => changeStatus(account)}>
+                          {account.enabled ? "Disable" : "Enable"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        Cashiers can create sales only. Managers can use POS inventory and sales history. Only administrators can manage staff and the rest of the admin portal.
+      </p>
+    </section>
+  );
+}
+
+function AdminAuditLogPage({ api }) {
+  const [events, setEvents] = useState([]);
+  const [page, setPage] = useState(0);
+  const [pageInfo, setPageInfo] = useState({ totalElements: 0, totalPages: 0, first: true, last: true });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [integrity, setIntegrity] = useState(null);
+  const [integrityError, setIntegrityError] = useState("");
+
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.getJson(
+        `${API_BASE_URL}/admin/audit/events?page=${page}&size=50`,
+        "Unable to load the admin audit log."
+      );
+      setEvents(Array.isArray(result?.content) ? result.content : []);
+      setPageInfo({
+        totalElements: Number(result?.totalElements || 0),
+        totalPages: Number(result?.totalPages || 0),
+        first: Boolean(result?.first),
+        last: Boolean(result?.last),
+      });
+      try {
+        const check = await api.getJson(
+          `${API_BASE_URL}/admin/audit/events/integrity`,
+          "Unable to verify audit-chain integrity."
+        );
+        setIntegrity(check);
+        setIntegrityError("");
+      } catch (integrityFailure) {
+        setIntegrity(null);
+        setIntegrityError(integrityFailure.message || "Audit-chain integrity could not be checked.");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to load the admin audit log.");
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, page]);
+
+  useEffect(() => { loadEvents(); }, [loadEvents]);
+
+  const formatTimestamp = (value) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "—"
+      : date.toLocaleString("en-IN", { timeZone: TIME_ZONE, dateStyle: "medium", timeStyle: "medium" });
+  };
+
+  return (
+    <section className="admin-content">
+      <PageHeading
+        title="Admin audit log"
+        description="Review recorded administrator and staff mutations, response outcomes and request metadata."
+        action={<RefreshButton onClick={loadEvents} loading={loading} />}
+      />
+      <ErrorMessage>{error}</ErrorMessage>
+      <div className="admin-table-card" style={{ marginBottom: 16 }}>
+        <div className="admin-table-heading">
+          <div>
+            <h3>Audit-chain integrity</h3>
+            <p>
+              {integrity
+                ? `${Number(integrity.checkedEvents || 0).toLocaleString("en-IN")} events checked`
+                : integrityError || "Integrity status has not been checked."}
+            </p>
+            {integrity?.failureReason && (
+              <p style={{ color: "var(--admin-danger, #b42318)" }}>{integrity.failureReason}</p>
+            )}
+          </div>
+          <span className={integrity?.valid ? "admin-status available" : "admin-status inactive"}>
+            {integrity?.valid ? "Chain verified" : "Not verified"}
+          </span>
+        </div>
+      </div>
+      <div className="admin-table-card">
+        <div className="admin-table-heading">
+          <div>
+            <h3>Recorded mutations</h3>
+            <p>{pageInfo.totalElements.toLocaleString("en-IN")} events · newest first · 50 per page</p>
+          </div>
+          <span className="admin-help-text">Times shown in India Standard Time</span>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Time</th><th>Actor</th><th>Authorities</th><th>Action</th>
+                <th>Resource</th><th>Result</th><th>Remote address</th><th>Request ID</th><th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <EmptyRow colSpan={9}>Loading audit events…</EmptyRow>
+                : events.length === 0 ? <EmptyRow colSpan={9}>No audit events found.</EmptyRow>
+                  : events.map((event) => (
+                    <tr key={event.id}>
+                      <td style={{ whiteSpace: "nowrap" }}>{formatTimestamp(event.createdAt)}</td>
+                      <td><strong>{event.actorUsername || "Unauthenticated"}</strong></td>
+                      <td>{event.actorAuthorities || "—"}</td>
+                      <td>
+                        <strong>{event.httpMethod}</strong>
+                        <div className="admin-help-text">HTTP {event.responseStatus}</div>
+                      </td>
+                      <td style={{ minWidth: 240, maxWidth: 420, overflowWrap: "anywhere" }}>{event.requestPath}</td>
+                      <td>
+                        <span className={event.outcome === "SUCCESS" ? "admin-status available" : "admin-status inactive"}>
+                          {event.outcome || "UNKNOWN"}
+                        </span>
+                      </td>
+                      <td>{event.remoteAddress || "—"}</td>
+                      <td style={{ maxWidth: 180, overflowWrap: "anywhere" }}>{event.requestId || "—"}</td>
+                      <td style={{ maxWidth: 220, overflowWrap: "anywhere" }}>{event.errorType || "—"}</td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+          <span className="admin-help-text">
+            Page {pageInfo.totalPages === 0 ? 0 : page + 1} of {pageInfo.totalPages}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="admin-secondary-button"
+              disabled={loading || pageInfo.first || page === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}>
+              Previous
+            </button>
+            <button type="button" className="admin-secondary-button"
+              disabled={loading || pageInfo.last || page + 1 >= pageInfo.totalPages}
+              onClick={() => setPage((current) => current + 1)}>
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+      <p className="admin-help-text" style={{ marginTop: 14 }}>
+        Hash-chain verification and append-only database triggers require manual backend migration 016 before deployment. Rejected admin mutations returning 401 or 403 are also recorded at the security layer. Upstream proxy failures and some pre-security failures may not be captured. A database administrator could still alter both the events and chain state; external backups and restricted database access remain necessary.
+      </p>
+    </section>
+  );
+}
+
 /* =========================
    ROOT COMPONENT
    Owns the session, shared data, navigation, notices, preferences and confirmations.
@@ -4890,6 +6071,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const token = sessionStorage.getItem("adminToken");
   const username = sessionStorage.getItem("adminUsername") || "Admin";
+  const role = sessionStorage.getItem("adminRole") || "ADMIN";
+  const isAdmin = role === "ADMIN";
 
   const [activePage, setActivePage] = useState("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -4899,6 +6082,10 @@ export default function AdminDashboard() {
   const [prefs, setPrefs] = useState(loadPrefs);
 
   const [lists, setLists] = useState({ products: [], orders: [], appointments: [], customers: [], images: [] });
+  const [appointmentsPageInfo, setAppointmentsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [ordersPageInfo, setOrdersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [customersPageInfo, setCustomersPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
+  const [productsPageInfo, setProductsPageInfo] = useState({ number: 0, totalPages: 0, totalElements: 0, last: true });
   const [loading, setLoading] = useState({});
   const [listErrors, setListErrors] = useState({});
 
@@ -4943,6 +6130,7 @@ export default function AdminDashboard() {
   const endSession = useCallback(() => {
     sessionStorage.removeItem("adminToken");
     sessionStorage.removeItem("adminUsername");
+    sessionStorage.removeItem("adminRole");
     navigate("/admin", { replace: true });
   }, [navigate]);
 
@@ -4960,13 +6148,64 @@ export default function AdminDashboard() {
 
   // Loads one list into state, with its own loading flag
   const loadList = useCallback(
-    async (key) => {
+    async (key, page = 0, append = false) => {
       const { url, message } = LIST_SOURCES[key];
+      const requestUrl = key === "appointments"
+        ? `${url}?page=${page}&size=50`
+        : key === "orders" ? `${url}?page=${page}&size=25`
+        : key === "customers" ? `${url}?page=${page}&size=50`
+        : key === "products" ? `${url}?page=${page}&size=50` : url;
 
       setLoading((prev) => ({ ...prev, [key]: true }));
       try {
-        const data = await getJson(url, message);
-        if (data) setLists((prev) => ({ ...prev, [key]: data }));
+        const data = await getJson(requestUrl, message);
+        if (key === "appointments" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            appointments: append ? [...prev.appointments, ...data.content] : data.content,
+          }));
+          setAppointmentsPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "orders" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            orders: append ? [...prev.orders, ...data.content.filter((item) => !prev.orders.some((existing) => existing.id === item.id))] : data.content,
+          }));
+          setOrdersPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "customers" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            customers: append ? [...prev.customers, ...data.content] : data.content,
+          }));
+          setCustomersPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (key === "products" && Array.isArray(data?.content)) {
+          setLists((prev) => ({
+            ...prev,
+            products: append ? [...prev.products, ...data.content.filter((item) => !prev.products.some((existing) => existing.id === item.id))] : data.content,
+          }));
+          setProductsPageInfo({
+            number: Number(data.number || 0),
+            totalPages: Number(data.totalPages || 0),
+            totalElements: Number(data.totalElements || 0),
+            last: Boolean(data.last),
+          });
+        } else if (data) {
+          setLists((prev) => ({ ...prev, [key]: data }));
+        }
         setListErrors((prev) => ({ ...prev, [key]: "" }));
       } catch (err) {
         setListErrors((prev) => ({ ...prev, [key]: err.message || message }));
@@ -5035,7 +6274,7 @@ export default function AdminDashboard() {
     Products: () => loadList("products"),
     Orders: () => loadList("orders"),
     Appointments: () => loadList("appointments"),
-    Customers: () => Promise.all([loadList("customers"), loadList("orders")]),
+    Customers: () => loadList("customers"),
     Marketing: () => Promise.all([loadMarketing(), reloadImages()]),
   };
 
@@ -5075,19 +6314,27 @@ export default function AdminDashboard() {
           <ProductsPage
             api={api}
             products={products}
+            pageInfo={productsPageInfo}
             loading={loading.products}
             onReload={reloaders.Products}
+            onLoadMore={() => loadList("products", productsPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
+      case "Payment Settlements":
+        return isAdmin ? <SettlementReconciliationPage api={api} /> : null;
+      case "Payment Disputes":
+        return isAdmin ? <PaymentDisputesPage api={api} /> : null;
       case "Orders":
         return (
           <OrdersPage
             api={api}
             orders={orders}
+            pageInfo={ordersPageInfo}
             loading={loading.orders}
             loadError={listErrors.orders}
             onReload={reloaders.Orders}
+            onLoadMore={() => loadList("orders", ordersPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
@@ -5096,18 +6343,22 @@ export default function AdminDashboard() {
           <AppointmentsPage
             api={api}
             appointments={appointments}
+            pageInfo={appointmentsPageInfo}
             loading={loading.appointments}
             onReload={reloaders.Appointments}
+            onLoadMore={() => loadList("appointments", appointmentsPageInfo.number + 1, true)}
             onNotice={setNotice}
           />
         );
       case "Customers":
         return (
           <CustomersPage
-            orders={orders}
+            api={api}
             customers={customers}
+            pageInfo={customersPageInfo}
             loading={loading.customers}
             onReload={reloaders.Customers}
+            onLoadMore={() => loadList("customers", customersPageInfo.number + 1, true)}
           />
         );
       case "Marketing":
@@ -5124,6 +6375,10 @@ export default function AdminDashboard() {
             onReloadImages={reloadImages}
           />
         );
+      case "Staff":
+        return isAdmin ? <StaffManagementPage api={api} onNotice={setNotice} /> : null;
+      case "Audit Log":
+        return isAdmin ? <AdminAuditLogPage api={api} /> : null;
       case "Settings":
         return (
           <SettingsPage
@@ -5167,7 +6422,7 @@ export default function AdminDashboard() {
             <div className="admin-menu-label">MAIN MENU</div>
 
             <nav className="admin-navigation" aria-label="Admin">
-              {MENU_ITEMS.map((item) => {
+              {MENU_ITEMS.filter((item) => !["Staff", "Audit Log", "Payment Settlements", "Payment Disputes"].includes(item.name) || isAdmin).map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.name;
 
@@ -5177,7 +6432,15 @@ export default function AdminDashboard() {
                     type="button"
                     className={`admin-nav-item ${isActive ? "active" : ""}`}
                     aria-current={isActive ? "page" : undefined}
-                    onClick={() => navigateTo(item.name)}
+                    onClick={() => {
+                      if (item.name === "POS Terminal") {
+                        setActivePage(item.name);
+                        setSidebarOpen(false);
+                        navigate("/admin/pos");
+                        return;
+                      }
+                      navigateTo(item.name);
+                    }}
                   >
                     <Icon size={19} aria-hidden="true" />
                     <span>{item.name}</span>

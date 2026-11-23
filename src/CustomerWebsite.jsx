@@ -30,7 +30,7 @@ const FaceAnalysis = lazy(() => import("./FaceAnalysis"));
    CONSTANTS
 ========================= */
 
-const API_BASE = "http://localhost:8080/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || (import.meta.env.DEV ? "http://localhost:8080/api" : "");
 const API_URL = `${API_BASE}/products`;
 const CART_KEY = "nmk-cart";
 const WISHLIST_KEY = "nmk-wishlist";
@@ -358,19 +358,34 @@ const buildProductOverview = (p) => {
 
 const toProduct = (p) => {
   const overview = buildProductOverview(p);
+  const variants = (Array.isArray(p.variants) ? p.variants : []).map((variant) => ({
+    id: Number(variant.id),
+    variantName: variant.variantName || "Standard",
+    attributes: variant.attributes || {},
+    numericPrice: Number(variant.price ?? p.price ?? 0),
+    availableQuantity: Math.max(0, Number(variant.availableQuantity ?? 0)),
+  }));
+  const numericPrice = variants.length
+    ? Math.min(...variants.map((variant) => variant.numericPrice))
+    : Number(p.price || 0);
+  const stockQuantity = variants.reduce(
+    (sum, variant) => sum + variant.availableQuantity,
+    0
+  );
 
   return {
-    id: p.id,
+    id: Number(p.id),
     name: p.name || p.productName || p.category || "Eyewear",
     brand: overview.brand,
     subtitle: overview.subtitle,
     size: overview.size,
     type: p.category || "Eyewear",
     gender: p.gender || "",
-    price: formatINR(p.price),
-    numericPrice: Number(p.price || 0),
+    price: formatINR(numericPrice),
+    numericPrice,
     image: p.imageUrl || FALLBACK_IMAGES.product,
-    stockQuantity: Number(p.stockQuantity ?? 0),
+    stockQuantity,
+    variants,
     description: p.description || "",
     specifications: p.specifications || {},
     createdAt: p.createdAt || null,
@@ -379,71 +394,107 @@ const toProduct = (p) => {
   };
 };
 
-// Every cart line has its own lineId. Customised eyeglasses get a new line each time.
+// Every cart line has its own lineId. A plain line is unique per product variant.
 const makeLineId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-const cartLineKey = (item) => item.lineId ?? String(item.id);
+const cartLineKey = (item) => item.lineId ?? `${item.id}:${item.variantId}`;
 
-// Brings saved cart lines in line with the live catalogue: fresh frame price and stock,
-// lens prices recalculated from the current table, stock limits applied, and invalid or sold-out lines removed.
-const reconcileCart = (items, catalogue) => {
-  const byId = new Map(catalogue.map((p) => [p.id, p]));
-  const usedById = new Map();
+// Reconcile saved lines against the latest variant-level stock and price from the catalogue.
+const reconcileCart = (items, catalogue, unavailableProductIds = []) => {
+  const byId = new Map(catalogue.map((product) => [product.id, product]));
+  const unavailableIds = new Set(unavailableProductIds.map(Number));
+  const usedByVariant = new Map();
   const merged = [];
   let removed = 0;
 
   (Array.isArray(items) ? items : []).forEach((item) => {
-    if (!item || item.id == null) {
+    if (!item || item.id == null || item.variantId == null) {
       removed += 1;
       return;
     }
 
-    const fresh = byId.get(item.id);
-    if (!fresh || fresh.stockQuantity <= 0) {
+    const fresh = byId.get(Number(item.id));
+    if (!fresh) {
+      // A product absent from the current server page is not automatically unavailable.
+      // Keep it until its direct cart-reference lookup confirms a 404.
+      if (unavailableIds.has(Number(item.id))) {
+        removed += 1;
+      } else {
+        merged.push(item);
+      }
+      return;
+    }
+
+    const freshVariant = fresh.variants.find(
+      (variant) => variant.id === Number(item.variantId)
+    );
+
+    if (!freshVariant || freshVariant.availableQuantity <= 0) {
       removed += 1;
       return;
     }
 
-    const used = usedById.get(fresh.id) || 0;
-    const room = fresh.stockQuantity - used;
+    const variantKey = `${fresh.id}:${freshVariant.id}`;
+    const used = usedByVariant.get(variantKey) || 0;
+    const room = freshVariant.availableQuantity - used;
     if (room <= 0) {
       removed += 1;
       return;
     }
 
+    const variantPrice = Number(freshVariant.numericPrice) || 0;
     const contact = item.lens?.kind === "contact";
     const lens = item.lens
       ? {
           ...item.lens,
           pricing: contact
-            ? contactPricing(fresh.numericPrice, item.lens.units)
-            : calculateLensPricing(fresh.numericPrice, item.lens.powerType, item.lens.lensType, item.lens.photochromic),
+            ? contactPricing(variantPrice, item.lens.units)
+            : calculateLensPricing(
+                variantPrice,
+                item.lens.powerType,
+                item.lens.lensType,
+                item.lens.photochromic
+              ),
         }
       : null;
 
-    // Customised lines keep their own unit count, which must still fit the stock
     const units = lens ? (contact ? Number(item.lens.units) || 1 : 1) : null;
     if (units !== null && units > room) {
       removed += 1;
       return;
     }
 
-    const lineId = item.lineId || (lens ? makeLineId() : String(fresh.id));
-    const quantity = lens ? units : Math.min(Math.max(1, Number(item.quantity) || 1), room);
-    const existing = lens ? null : merged.find((m) => m.lineId === lineId);
+    const lineId = item.lineId || (lens ? makeLineId() : variantKey);
+    const quantity = lens
+      ? units
+      : Math.min(Math.max(1, Number(item.quantity) || 1), room);
+    const existing = lens ? null : merged.find((line) => line.lineId === lineId);
+    const unitPrice = lens && !contact ? lens.pricing.total : variantPrice;
+    const cartProduct = {
+      ...fresh,
+      variantId: freshVariant.id,
+      variantName: freshVariant.variantName,
+      variantAttributes: freshVariant.attributes,
+      stockQuantity: freshVariant.availableQuantity,
+      numericPrice: unitPrice,
+      price: formatINR(unitPrice),
+    };
 
     if (existing) {
       existing.quantity += quantity;
     } else {
-      const unitPrice = lens && !contact ? lens.pricing.total : Number(fresh.numericPrice) || 0;
-      merged.push({ ...fresh, lineId, quantity, lens, numericPrice: unitPrice, price: formatINR(unitPrice) });
+      merged.push({
+        ...cartProduct,
+        lineId,
+        quantity,
+        lens,
+      });
     }
 
-    usedById.set(fresh.id, used + quantity);
+    usedByVariant.set(variantKey, used + quantity);
   });
 
   return { items: merged, removed };
 };
-
 /* =========================
    SMALL COMPONENTS
 ========================= */
@@ -586,6 +637,7 @@ function CartItem({ item, children, actions }) {
       <FallbackImage src={item.image} fallback={FALLBACK_IMAGES.product} alt="" />
       <div className="cart-item-body">
         <h3>{item.name}</h3>
+        {item.variantName && <p className="cart-item-variant">{item.variantName}</p>}
         <p>{formatINR(item.numericPrice)}</p>
         {children}
         {actions}
@@ -741,8 +793,6 @@ function ProductCard({
    Power type -> lens -> prescription -> review, then add to cart.
 ========================= */
 
-const CLOUDINARY_CLOUD = "ydkweahp";
-const CLOUDINARY_PRESET = "nmk_opticals";
 const PRESCRIPTION_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const PRESCRIPTION_MAX_SIZE = 5 * 1024 * 1024;
 
@@ -841,7 +891,7 @@ const EMPTY_PRESCRIPTION = {
   hasCylinder: true,
   right: EMPTY_EYE,
   left: EMPTY_EYE,
-  imageUrl: "",
+  imageAsset: null,
   imageName: "",
   consent: false,
 };
@@ -867,7 +917,7 @@ const isAxisValid = (value) => /^\d+$/.test(String(value)) && Number(value) >= 0
 // Returns an error message, or "" when the prescription is complete
 const prescriptionProblem = (rx, addition) => {
   if (rx.mode === "image") {
-    if (!rx.imageUrl) return "Please upload your prescription image or PDF.";
+    if (!rx.imageAsset?.publicId) return "Please upload your prescription image or PDF.";
   } else {
     const eyes = rx.sameForBothEyes ? ["right"] : ["right", "left"];
 
@@ -900,7 +950,7 @@ const cleanEye = (row, hasCylinder, addition) => ({
 
 const buildPrescriptionPayload = (rx, addition) =>
   rx.mode === "image"
-    ? { mode: "image", imageUrl: rx.imageUrl }
+    ? { mode: "image", ...rx.imageAsset }
     : {
         mode: "manual",
         sameForBothEyes: rx.sameForBothEyes,
@@ -910,16 +960,14 @@ const buildPrescriptionPayload = (rx, addition) =>
         left: cleanEye(rx.sameForBothEyes ? rx.right : rx.left, rx.hasCylinder, addition),
       };
 
-// Uploads a prescription image or PDF to the store's storage and returns its URL
+// Uploads through the backend, which validates the file and stores it as a private asset.
 const uploadPrescription = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_PRESET);
-  formData.append("folder", "nmk-prescriptions");
 
   let response;
   try {
-    response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`, {
+    response = await fetch(`${API_BASE}/prescriptions/upload`, {
       method: "POST",
       body: formData,
     });
@@ -928,10 +976,10 @@ const uploadPrescription = async (file) => {
   }
 
   const data = await readJson(response);
-  if (!response.ok || !data.secure_url) {
-    throw new Error(data.error?.message || "Prescription upload failed. Please try again.");
+  if (!response.ok || !data.publicId || !data.signature) {
+    throw new Error(data.message || "Prescription upload failed. Please try again.");
   }
-  return data.secure_url;
+  return data;
 };
 
 function LensTypeIllustration({ type }) {
@@ -1173,8 +1221,8 @@ function LensCustomizer({ product, onCancel, onConfirm, onBookEyeTest }) {
     setUploading(true);
 
     try {
-      const imageUrl = await uploadPrescription(file);
-      setPrescription((prev) => ({ ...prev, imageUrl, imageName: file.name }));
+      const imageAsset = await uploadPrescription(file);
+      setPrescription((prev) => ({ ...prev, imageAsset, imageName: imageAsset.imageName || file.name }));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1725,6 +1773,69 @@ function ProductDetails({ product, inCart, onClose, onAddToCart }) {
   );
 }
 
+
+function VariantPicker({ product, onCancel, onConfirm }) {
+  const availableVariants = (product.variants || []).filter(
+    (variant) => variant.availableQuantity > 0
+  );
+  const [selectedId, setSelectedId] = useState(
+    String(availableVariants[0]?.id ?? "")
+  );
+  const selected = availableVariants.find(
+    (variant) => String(variant.id) === selectedId
+  );
+
+  const describeAttributes = (attributes) =>
+    Object.entries(attributes || {})
+      .map(([key, value]) => `${formatSpecLabel(key)}: ${Array.isArray(value) ? value.join(", ") : String(value)}`)
+      .join(" · ");
+
+  return (
+    <Modal
+      title={`Choose an option for ${product.name}`}
+      onClose={onCancel}
+      className="site-modal--form"
+    >
+      <div className="panel-form variant-picker">
+        <p>Select the exact variant you want to purchase.</p>
+        <label htmlFor="customer-variant-choice">Available variants</label>
+        <select
+          id="customer-variant-choice"
+          className="variant-picker-select"
+          value={selectedId}
+          onChange={(event) => setSelectedId(event.target.value)}
+        >
+          {availableVariants.map((variant, index) => {
+            const attributes = describeAttributes(variant.attributes);
+            const label = variant.variantName || `Option ${index + 1}`;
+            return (
+              <option key={variant.id} value={String(variant.id)}>
+                {label}{attributes ? ` — ${attributes}` : ""} · {variant.availableQuantity} available
+              </option>
+            );
+          })}
+        </select>
+
+        {selected && (
+          <div className="variant-picker-summary">
+            <strong>{selected.variantName}</strong>
+            <span>{formatINR(selected.numericPrice)}</span>
+            <small>{selected.availableQuantity} available</small>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="product-btn"
+          disabled={!selected}
+          onClick={() => selected && onConfirm(selected)}
+        >
+          Continue
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
 // Values a product has for a facet ("gender" is a product field, the rest are specifications)
 const facetValuesOf = (product, key) => {
@@ -2405,6 +2516,12 @@ export default function CustomerWebsite() {
   // DATA
   const [products, setProducts] = useState([]);
   const [productsReady, setProductsReady] = useState(false);
+  const [productsPage, setProductsPage] = useState(0);
+  const [productsHasNext, setProductsHasNext] = useState(false);
+  const [loadingMoreProducts, setLoadingMoreProducts] = useState(false);
+  const [cartReferenceProducts, setCartReferenceProducts] = useState([]);
+  const [cartUnavailableProductIds, setCartUnavailableProductIds] = useState([]);
+  const [cartReferencesReady, setCartReferencesReady] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
   const [productReloadKey, setProductReloadKey] = useState(0);
@@ -2432,6 +2549,7 @@ export default function CustomerWebsite() {
   // UI
   const [panel, setPanel] = useState(null); // cart | wishlist | checkout | eye | face | success | info
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [variantChoosing, setVariantChoosing] = useState(null);
   const [infoTitle, setInfoTitle] = useState("");
   const [orderResult, setOrderResult] = useState(null);
   const [toast, setToast] = useState(null);
@@ -2478,24 +2596,63 @@ export default function CustomerWebsite() {
     writeStorage(WISHLIST_KEY, wishlist);
   }, [wishlist]);
 
-  // FETCH PRODUCTS (re-runs when the user presses "Try again")
+  // FETCH FIRST CATALOGUE PAGE AND REFRESH SAVED CART REFERENCES.
+  // Cart lines outside the first page are looked up individually so pagination
+  // never mistakes an unloaded product for a deleted or out-of-stock product.
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
     const loadProducts = async () => {
       setLoadingProducts(true);
+      setLoadingMoreProducts(false);
+      setProductsReady(false);
+      setCartReferencesReady(false);
       setProductError("");
+      setProducts([]);
+      setCartReferenceProducts([]);
+      setCartUnavailableProductIds([]);
+      setProductsPage(0);
+      setProductsHasNext(false);
+      setVisibleCount(PAGE_SIZE);
 
       try {
-        const response = await fetch(API_URL, { signal });
+        const response = await fetch(`${API_URL}?page=0&size=24`, { signal });
         if (!response.ok) throw new Error("Failed to fetch products");
 
-        const data = await response.json();
-        if (!Array.isArray(data)) throw new Error("Unexpected product data");
+        const payload = await response.json();
+        const rawProducts = Array.isArray(payload) ? payload : payload?.content;
+        if (!Array.isArray(rawProducts)) throw new Error("Unexpected product data");
 
-        setProducts(data.map(toProduct));
+        const firstPage = rawProducts.map(toProduct);
+        setProducts(firstPage);
+        setProductsPage(Array.isArray(payload) ? 0 : Number(payload.number || 0));
+        setProductsHasNext(Array.isArray(payload) ? false : Boolean(payload.last === false));
+
+        const savedCart = Array.isArray(cartRef.current) ? cartRef.current : [];
+        const cartProductIds = [...new Set(savedCart
+          .map((item) => Number(item?.id))
+          .filter((id) => Number.isInteger(id) && id > 0))];
+        const missingCartProductIds = cartProductIds.filter(
+          (id) => !firstPage.some((product) => Number(product.id) === id)
+        );
+
+        const cartLookups = await Promise.all(missingCartProductIds.map(async (id) => {
+          try {
+            const lookup = await fetch(`${API_URL}/${encodeURIComponent(id)}`, { signal });
+            if (lookup.status === 404) return { id, unavailable: true };
+            if (!lookup.ok) return { id, unavailable: false };
+            return { id, product: toProduct(await lookup.json()), unavailable: false };
+          } catch (lookupError) {
+            if (lookupError.name === "AbortError") throw lookupError;
+            return { id, unavailable: false };
+          }
+        }));
+
+        setCartReferenceProducts(cartLookups.filter((item) => item.product).map((item) => item.product));
+        setCartUnavailableProductIds(cartLookups.filter((item) => item.unavailable).map((item) => item.id));
         setProductsReady(true);
+        setCartReferencesReady(true);
       } catch (error) {
         if (error.name === "AbortError") return;
         console.error("Product API error:", error);
@@ -2509,16 +2666,49 @@ export default function CustomerWebsite() {
     return () => controller.abort();
   }, [productReloadKey]);
 
-  // KEEP SAVED CART IN STEP WITH THE CATALOGUE (price, stock, removals)
-  useEffect(() => {
-    if (!productsReady) return;
+  const loadMoreProducts = useCallback(async () => {
+    if (!productsHasNext || loadingMoreProducts) return;
+    const nextPage = productsPage + 1;
+    setLoadingMoreProducts(true);
+    try {
+      const response = await fetch(`${API_URL}?page=${nextPage}&size=24`);
+      if (!response.ok) throw new Error("Unable to load more products");
+      const payload = await response.json();
+      const rawProducts = Array.isArray(payload) ? payload : payload?.content;
+      if (!Array.isArray(rawProducts)) throw new Error("Unexpected product data");
 
-    const { items, removed } = reconcileCart(cartRef.current, products);
+      const nextProducts = rawProducts.map(toProduct);
+      setProducts((current) => [
+        ...current,
+        ...nextProducts.filter((product) => !current.some((existing) => Number(existing.id) === Number(product.id))),
+      ]);
+      setProductsPage(Array.isArray(payload) ? nextPage : Number(payload.number ?? nextPage));
+      setProductsHasNext(Array.isArray(payload) ? false : Boolean(payload.last === false));
+      setVisibleCount((current) => current + PAGE_SIZE);
+    } catch (error) {
+      console.error("Load more products error:", error);
+      notify("We couldn't load more products right now. Please try again.");
+    } finally {
+      setLoadingMoreProducts(false);
+    }
+  }, [productsHasNext, loadingMoreProducts, productsPage, notify]);
+
+  // KEEP SAVED CART IN STEP WITH LOADED PRODUCTS AND DIRECT CART REFERENCES.
+  useEffect(() => {
+    if (!productsReady || !cartReferencesReady) return;
+
+    const byId = new Map();
+    [...cartReferenceProducts, ...products].forEach((product) => byId.set(Number(product.id), product));
+    const { items, removed } = reconcileCart(
+      cartRef.current,
+      [...byId.values()],
+      cartUnavailableProductIds
+    );
     cartRef.current = items;
     setCart(items);
 
     if (removed > 0) notify("Some items in your cart are no longer available and were removed.");
-  }, [products, productsReady, notify]);
+  }, [products, cartReferenceProducts, cartUnavailableProductIds, productsReady, cartReferencesReady, notify]);
 
   // FETCH WEBSITE IMAGES
   useEffect(() => {
@@ -2685,15 +2875,25 @@ const cartTotal = cart.reduce(
   // Lens customisation for eyeglasses. The pair stays out of the cart until the customer confirms.
   const [customizing, setCustomizing] = useState(null);
 
-  const unitsInCart = (items, productId) =>
+  const unitsInCart = (items, productId, variantId = null) =>
     items
-      .filter((item) => item && item.id === productId)
+      .filter((item) =>
+        item &&
+        item.id === productId &&
+        (variantId == null || Number(item.variantId) === Number(variantId))
+      )
       .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
   const addPlainItem = (product) => {
-    const lineId = String(product.id);
+    const lineId = `${product.id}:${product.variantId}`;
     const current = cartRef.current;
     const exists = current.some((item) => cartLineKey(item) === lineId);
+    const inCart = unitsInCart(current, product.id, product.variantId);
+
+    if (inCart >= product.stockQuantity) {
+      notify(`Only ${product.stockQuantity} of this variant are available.`);
+      return false;
+    }
 
     const next = exists
       ? current.map((item) => (cartLineKey(item) === lineId ? { ...item, quantity: item.quantity + 1 } : item))
@@ -2705,6 +2905,37 @@ const cartTotal = cart.reduce(
     return true;
   };
 
+  const addSelectedVariant = (product, variant) => {
+    const selectedProduct = {
+      ...product,
+      variantId: Number(variant.id),
+      variantName: variant.variantName,
+      variantAttributes: variant.attributes || {},
+      stockQuantity: Number(variant.availableQuantity) || 0,
+      numericPrice: Number(variant.numericPrice ?? variant.price) || 0,
+      price: formatINR(Number(variant.numericPrice ?? variant.price) || 0),
+    };
+    const inCart = unitsInCart(
+      cartRef.current,
+      selectedProduct.id,
+      selectedProduct.variantId
+    );
+
+    if (selectedProduct.stockQuantity <= 0 || inCart >= selectedProduct.stockQuantity) {
+      notify("This variant is no longer available. Please choose another option.");
+      return false;
+    }
+
+    if (isEyeglasses(selectedProduct) || isContactLens(selectedProduct)) {
+      setSelectedProduct(null);
+      setPanel(null);
+      setCustomizing(selectedProduct);
+      return false;
+    }
+
+    return addPlainItem(selectedProduct);
+  };
+
   // Leaves the customiser and opens the existing eye test booking form
   const openEyeTestFromCustomizer = () => {
     setCustomizing(null);
@@ -2713,10 +2944,10 @@ const cartTotal = cart.reduce(
 
   const addLensLine = (product, lens) => {
     const units = lens.kind === "contact" ? lens.units : 1;
-    const inCart = unitsInCart(cartRef.current, product.id);
+    const inCart = unitsInCart(cartRef.current, product.id, product.variantId);
 
     if (inCart + units > product.stockQuantity) {
-      notify(`Only ${product.stockQuantity} available. You already have ${inCart} in your cart.`);
+      notify(`Only ${product.stockQuantity} available for this variant. You already have ${inCart} in your cart.`);
       return;
     }
 
@@ -2731,7 +2962,7 @@ const cartTotal = cart.reduce(
     notify(lens.kind === "contact" ? "Contact lenses added to your cart." : "Eyeglasses added to your cart with your lens choices.");
   };
 
-  // Returns true only when a product was added straight away, so callers can decide what else to do
+  // Every cart line must be tied to a real, active catalogue variant.
   const requestAddToCart = useCallback(
     (product) => {
       if (product.stockQuantity <= 0) {
@@ -2740,19 +2971,27 @@ const cartTotal = cart.reduce(
       }
 
       if (unitsInCart(cartRef.current, product.id) >= product.stockQuantity) {
-        notify(`Only ${product.stockQuantity} available. You already have the maximum in your cart.`);
+        notify("You already have the available quantity of this product in your cart.");
         return false;
       }
 
-      if (isEyeglasses(product) || isContactLens(product)) {
-        // The customiser opens over the page, so close the panels underneath it
-        setSelectedProduct(null);
-        setPanel(null);
-        setCustomizing(product);
+      const availableVariants = (product.variants || []).filter(
+        (variant) => variant.availableQuantity > 0
+      );
+
+      if (availableVariants.length === 0) {
+        notify("No purchasable variants are currently available.");
         return false;
       }
 
-      return addPlainItem(product);
+      if (availableVariants.length === 1) {
+        return addSelectedVariant(product, availableVariants[0]);
+      }
+
+      setSelectedProduct(null);
+      setPanel(null);
+      setVariantChoosing(product);
+      return false;
     },
     [notify]
   );
@@ -2765,7 +3004,12 @@ const cartTotal = cart.reduce(
       if (!target) return current;
 
       const others = current
-  .filter((item) => item && item.id === target.id && cartLineKey(item) !== lineKey)
+        .filter((item) =>
+          item &&
+          item.id === target.id &&
+          Number(item.variantId) === Number(target.variantId) &&
+          cartLineKey(item) !== lineKey
+        )
         .reduce((sum, item) => sum + item.quantity, 0);
       const max = Math.max(1, target.stockQuantity - others);
 
@@ -2968,6 +3212,11 @@ const cartTotal = cart.reduce(
       return;
     }
 
+    if (cart.some((item) => !Number.isInteger(Number(item.variantId)) || Number(item.variantId) <= 0)) {
+      setCheckoutError("Your cart is still being refreshed. Please wait a moment and try again.");
+      return;
+    }
+
     setPaymentLoading(true);
 
     try {
@@ -2992,14 +3241,14 @@ const cartTotal = cart.reduce(
           ...customer,
           items: cart.map((item) => ({
             productId: Number(item.id),
+            variantId: Number(item.variantId),
             quantity: item.quantity,
-            lensKind: item.lens?.kind ?? "eyeglasses",
+            lensKind: item.lens?.kind ?? null,
             prescriptionType: item.lens?.powerType ?? null,
             lensType: item.lens?.lensType ?? null,
             photochromic: Boolean(item.lens?.photochromic),
             prescription: item.lens?.prescription ?? null,
             prescriptionFileName: item.lens?.prescriptionFileName ?? null,
-            expectedTotal: item.lens?.pricing?.total ?? item.numericPrice,
           })),
         }),
       });
@@ -3066,7 +3315,7 @@ const cartTotal = cart.reduce(
     if (filteredProducts.length === 0) {
       return (
         <div className="grid-message">
-          <p>No matching products found.</p>
+          <p>{productsHasNext ? "No matches in the loaded pages. Load more to search the rest of the catalogue." : "No matching products found."}</p>
           {hasActiveFilters && (
             <button type="button" className="text-btn" onClick={resetFilters}>
               Clear filters
@@ -3093,12 +3342,13 @@ const cartTotal = cart.reduce(
     ? "Loading products"
     : productError
       ? ""
-      : `${filteredProducts.length} products found`;
+      : `${filteredProducts.length} products loaded${productsHasNext ? " · load more to search the full catalogue" : " found"}`;
 
   const cartSummary = cart.filter(Boolean).map((item) => (
     <div className="checkout-summary-item" key={cartLineKey(item)}>
       <span>
         <strong>{item.name}</strong>
+        {item.variantName && <small className="checkout-variant-name">{item.variantName}</small>}
         {item.quantity > 1 && ` × ${item.quantity}`}
         {item.lens && <LensSummary lens={item.lens} />}
       </span>
@@ -3373,10 +3623,25 @@ const cartTotal = cart.reduce(
                 {renderProducts()}
               </div>
 
-              {!loadingProducts && !productError && filteredProducts.length > visibleCount && (
+              {!loadingProducts && !productError && (filteredProducts.length > visibleCount || productsHasNext) && (
                 <div className="load-more">
-                  <button type="button" className="text-btn" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
-                    Show more ({filteredProducts.length - visibleCount} remaining)
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => {
+                      if (filteredProducts.length > visibleCount) {
+                        setVisibleCount((n) => n + PAGE_SIZE);
+                      } else {
+                        loadMoreProducts();
+                      }
+                    }}
+                    disabled={loadingMoreProducts}
+                  >
+                    {loadingMoreProducts
+                      ? "Loading products..."
+                      : filteredProducts.length > visibleCount
+                        ? `Show more (${filteredProducts.length - visibleCount} remaining)`
+                        : "Load more products"}
                   </button>
                 </div>
               )}
@@ -3539,6 +3804,19 @@ const cartTotal = cart.reduce(
           inCart={cartCounts.get(selectedProduct.id) ?? 0}
           onClose={() => setSelectedProduct(null)}
           onAddToCart={requestAddToCart}
+        />
+      )}
+
+      {/* SELECT A REAL INVENTORY VARIANT BEFORE ADDING TO CART */}
+      {variantChoosing && (
+        <VariantPicker
+          product={variantChoosing}
+          onCancel={() => setVariantChoosing(null)}
+          onConfirm={(variant) => {
+            const product = variantChoosing;
+            setVariantChoosing(null);
+            addSelectedVariant(product, variant);
+          }}
         />
       )}
 

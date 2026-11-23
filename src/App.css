@@ -4575,3 +4575,65 @@ body {
     padding: 12px;
   }
 }
+
+
+/* Customer inventory variant selection */
+.website .variant-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.website .variant-picker > p {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.website .variant-picker label {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.website .variant-picker-select {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--navy);
+  font: inherit;
+}
+
+.website .variant-picker-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #faf9f6;
+  color: var(--navy);
+}
+
+.website .variant-picker-summary small {
+  width: 100%;
+  color: var(--muted);
+}
+
+.website .cart-item-variant {
+  margin: -4px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.website .checkout-variant-name {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
