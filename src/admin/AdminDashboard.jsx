@@ -2812,8 +2812,8 @@ function SettlementReconciliationPage({ api }) {
   };
 
   return (
-    <section className="admin-content">
-      <div className="admin-section-header">
+    <section className="admin-content settlement-page">
+      <div className="admin-section-header settlement-page-header">
         <div>
           <h2>Razorpay settlement reconciliation</h2>
           <p>Fetch provider settlement reports and match payment/refund rows against NMK orders.</p>
@@ -2823,19 +2823,19 @@ function SettlementReconciliationPage({ api }) {
         </button>
       </div>
 
-      <div className="admin-table-card" style={{ marginBottom: 16 }}>
-        <div className="admin-table-heading">
+      <div className="admin-table-card settlement-sync-card">
+        <div className="admin-table-heading settlement-card-heading">
           <div>
             <h3>Synchronize provider report</h3>
             <p>Choose a month or a single day. The sync is read-only against Razorpay.</p>
           </div>
         </div>
-        <div className="admin-form-grid" style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-          <label className="admin-form-group">
+        <div className="admin-form-grid settlement-sync-fields">
+          <label className="admin-form-group settlement-field">
             <span>Year</span>
             <input type="number" min="2020" max={now.getFullYear()} value={year} onChange={(event) => setYear(event.target.value)} />
           </label>
-          <label className="admin-form-field">
+          <label className="admin-form-field settlement-field">
             <span>Month</span>
             <select value={month} onChange={(event) => setMonth(event.target.value)}>
               {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
@@ -2843,30 +2843,30 @@ function SettlementReconciliationPage({ api }) {
               ))}
             </select>
           </label>
-          <label className="admin-form-field">
+          <label className="admin-form-field settlement-field">
             <span>Day (optional)</span>
             <input type="number" min="1" max="31" placeholder="Whole month" value={day} onChange={(event) => setDay(event.target.value)} />
           </label>
-          <div style={{ display: "flex", alignItems: "end" }}>
+          <div className="settlement-sync-action">
             <button type="button" className="admin-primary-button" onClick={syncSettlements} disabled={syncing || loading || !year || !month}>
               {syncing ? "Synchronizing…" : "Sync Razorpay report"}
             </button>
           </div>
         </div>
-        {notice && <p className="admin-success-message" role="status" style={{ margin: "0 16px 16px" }}>{notice}</p>}
-        {error && <p className="admin-error-message" role="alert" style={{ margin: "0 16px 16px" }}>{error}</p>}
+        {notice && <p className="admin-success-message" role="status" className="settlement-inline-message">{notice}</p>}
+        {error && <p className="admin-error-message" role="alert" className="settlement-inline-message">{error}</p>}
       </div>
 
-      <div className="admin-table-card">
-        <div className="admin-table-heading">
+      <div className="admin-table-card settlement-batches-card">
+        <div className="admin-table-heading settlement-card-heading">
           <div>
             <h3>Settlement batches</h3>
             <p>{pageInfo.totalElements.toLocaleString("en-IN")} batches · newest first</p>
           </div>
           <span className="admin-help-text">Provider report records only</span>
         </div>
-        <div className="admin-table-scroll">
-          <table className="admin-table">
+        <div className="admin-table-scroll settlement-table-scroll">
+          <table className="admin-table settlement-table">
             <thead>
               <tr>
                 <th>Settlement / date</th><th>Provider status</th><th>Net amount</th>
@@ -2883,9 +2883,9 @@ function SettlementReconciliationPage({ api }) {
                         <div className="admin-help-text">{formatDateTime(item.providerCreatedAt)}</div>
                       </td>
                       <td><span className="admin-status">{item.status}</span></td>
-                      <td>{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
-                      <td>{formatINR(Number(item.feesPaise || 0) / 100, true)}</td>
-                      <td>{formatINR(Number(item.taxPaise || 0) / 100, true)}</td>
+                      <td className="settlement-amount">{formatINR(Number(item.amountPaise || 0) / 100, true)}</td>
+                      <td className="settlement-amount">{formatINR(Number(item.feesPaise || 0) / 100, true)}</td>
+                      <td className="settlement-amount">{formatINR(Number(item.taxPaise || 0) / 100, true)}</td>
                       <td className="od-mono">{item.utr || "—"}</td>
                       <td><span className={`admin-status ${statusClass(item.reconciliationStatus)}`}>{item.reconciliationStatus}</span></td>
                       <td>
@@ -2906,9 +2906,9 @@ function SettlementReconciliationPage({ api }) {
             </tbody>
           </table>
         </div>
-        <div className="admin-table-heading" style={{ borderTop: "1px solid var(--admin-border, #e5e7eb)" }}>
+        <div className="admin-table-heading settlement-pagination">
           <span className="admin-help-text">Page {pageInfo.totalPages === 0 ? 0 : pageInfo.number + 1} of {pageInfo.totalPages}</span>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div className="settlement-pagination-actions">
             <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.first || pageInfo.number === 0} onClick={() => loadSettlements(pageInfo.number - 1)}>Previous</button>
             <button type="button" className="admin-secondary-button" disabled={loading || pageInfo.last} onClick={() => loadSettlements(pageInfo.number + 1)}>Next</button>
           </div>
@@ -2916,16 +2916,16 @@ function SettlementReconciliationPage({ api }) {
       </div>
 
       {selected && (
-        <div className="admin-table-card" style={{ marginTop: 16 }}>
-          <div className="admin-table-heading">
+        <div className="admin-table-card settlement-detail-card">
+          <div className="admin-table-heading settlement-card-heading settlement-detail-heading">
             <div>
               <h3>Settlement rows · {selected.providerSettlementId}</h3>
               <p>{selected.utr || "No UTR returned"} · {entriesPageInfo.totalElements.toLocaleString("en-IN")} provider entries</p>
             </div>
             <button type="button" className="admin-secondary-button" onClick={() => { setSelected(null); setEntries([]); }}>Close</button>
           </div>
-          <div className="admin-table-scroll">
-            <table className="admin-table">
+          <div className="admin-table-scroll settlement-table-scroll">
+            <table className="admin-table settlement-entry-table">
               <thead>
                 <tr><th>Type / entity</th><th>Order / payment</th><th>Amount</th><th>Debit</th><th>Credit</th><th>Fee + tax</th><th>Match</th></tr>
               </thead>
@@ -2947,7 +2947,7 @@ function SettlementReconciliationPage({ api }) {
             </table>
           </div>
           {!entriesPageInfo.last && (
-            <div style={{ padding: 12, textAlign: "center" }}>
+            <div className="settlement-load-more">
               <button type="button" className="admin-secondary-button" disabled={entriesLoading} onClick={loadMoreEntries}>
                 {entriesLoading ? "Loading…" : "Load more rows"}
               </button>
@@ -2956,7 +2956,7 @@ function SettlementReconciliationPage({ api }) {
         </div>
       )}
 
-      <p className="admin-help-text" style={{ marginTop: 14 }}>
+      <p className="admin-help-text settlement-reconciliation-note">
         “Provider reconciled” means Razorpay’s settlement totals and payment/refund entries match the local order/refund ledgers. It does not confirm that the UTR credit appears in the shop’s bank statement. Bank-statement matching is a separate step and requires the client’s bank statement format.
       </p>
     </section>
