@@ -2853,8 +2853,8 @@ function SettlementReconciliationPage({ api }) {
             </button>
           </div>
         </div>
-        {notice && <p className="admin-success-message" role="status" className="settlement-inline-message">{notice}</p>}
-        {error && <p className="admin-error-message" role="alert" className="settlement-inline-message">{error}</p>}
+        {notice && <p className="admin-success-message settlement-inline-message" role="status">{notice}</p>}
+        {error && <p className="admin-error-message settlement-inline-message" role="alert">{error}</p>}
       </div>
 
       <div className="admin-table-card settlement-batches-card">
