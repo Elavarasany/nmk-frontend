@@ -4070,3 +4070,284 @@
     font-size: 12px;
   }
 }
+
+
+/* =========================================
+   PAYMENT SETTLEMENTS — PAGE ALIGNMENT
+========================================= */
+.settlement-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.settlement-page .settlement-page-header {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.settlement-page .settlement-page-header > div {
+  min-width: 0;
+}
+
+.settlement-page .settlement-page-header h2 {
+  margin-bottom: 5px;
+}
+
+.settlement-page .settlement-sync-card,
+.settlement-page .settlement-batches-card,
+.settlement-page .settlement-detail-card {
+  min-width: 0;
+  margin: 0;
+}
+
+.settlement-page .settlement-card-heading {
+  min-height: 76px;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.settlement-page .settlement-card-heading > div {
+  min-width: 0;
+}
+
+.settlement-page .settlement-card-heading p {
+  line-height: 1.5;
+}
+
+.settlement-sync-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) minmax(190px, 1.15fr);
+  align-items: end;
+  gap: 14px;
+  padding: 18px 22px 22px;
+}
+
+.settlement-page .settlement-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+}
+
+.settlement-page .settlement-field > span {
+  display: block;
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.settlement-page .settlement-field input,
+.settlement-page .settlement-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+}
+
+.settlement-sync-action {
+  display: flex;
+  align-items: end;
+  min-width: 0;
+}
+
+.settlement-sync-action .admin-primary-button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.settlement-page .settlement-inline-message {
+  margin: 0 22px 18px;
+}
+
+.settlement-page .settlement-batches-card .settlement-card-heading {
+  border-bottom: 0;
+}
+
+.settlement-page .settlement-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border-top: 1px solid var(--admin-border);
+  scrollbar-width: thin;
+}
+
+.settlement-page .settlement-table,
+.settlement-page .settlement-entry-table {
+  width: 100%;
+  min-width: 1120px;
+  table-layout: auto;
+}
+
+.settlement-page .settlement-table th,
+.settlement-page .settlement-entry-table th {
+  padding: 13px 14px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.settlement-page .settlement-table td,
+.settlement-page .settlement-entry-table td {
+  padding: 14px;
+  vertical-align: middle;
+  line-height: 1.45;
+}
+
+.settlement-page .settlement-table th:nth-child(3),
+.settlement-page .settlement-table th:nth-child(4),
+.settlement-page .settlement-table th:nth-child(5),
+.settlement-page .settlement-table td.settlement-amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlement-page .settlement-table td:nth-child(6) {
+  max-width: 170px;
+  overflow-wrap: anywhere;
+}
+
+.settlement-page .settlement-table td:nth-child(8) {
+  min-width: 170px;
+  white-space: normal;
+}
+
+.settlement-page .settlement-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.settlement-page .settlement-pagination {
+  min-height: 64px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--admin-border);
+  align-items: center;
+}
+
+.settlement-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settlement-pagination-actions .admin-secondary-button {
+  min-width: 88px;
+  justify-content: center;
+}
+
+.settlement-page .settlement-detail-card {
+  margin-top: 0;
+}
+
+.settlement-detail-heading {
+  gap: 16px;
+}
+
+.settlement-detail-heading > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settlement-page .settlement-entry-table {
+  min-width: 980px;
+}
+
+.settlement-page .settlement-entry-table td:nth-child(n + 3):nth-child(-n + 6) {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlement-page .settlement-entry-table td:last-child {
+  min-width: 190px;
+  white-space: normal;
+}
+
+.settlement-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  border-top: 1px solid var(--admin-border);
+}
+
+.settlement-reconciliation-note {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: var(--admin-subtle, #f8fafc);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .settlement-sync-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settlement-sync-action {
+    align-self: end;
+  }
+}
+
+@media (max-width: 600px) {
+  .settlement-page {
+    gap: 14px;
+  }
+
+  .settlement-page .settlement-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settlement-page .settlement-page-header > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settlement-page .settlement-card-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .settlement-sync-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .settlement-sync-action .admin-primary-button {
+    width: 100%;
+  }
+
+  .settlement-page .settlement-inline-message {
+    margin: 0 16px 16px;
+  }
+
+  .settlement-page .settlement-pagination {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 16px;
+  }
+
+  .settlement-pagination-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settlement-detail-heading {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  .settlement-detail-heading > button {
+    flex: 0 0 auto;
+  }
+}
