@@ -5335,26 +5335,19 @@ function CategoryImagesEditor({ api, images, loading, onReload, onNotice }) {
 
         return (
           <div className="wi-card" key={image.id ?? image.imageKey}>
-            {previewSrc ? (
-              <img className="wi-image" src={previewSrc} alt={`${image.title} category`} />
-            ) : (
-              <div
-                className="wi-image"
-                role="img"
-                aria-label={`${image.title}: no custom image, the website default is shown`}
-                style={{
-                  display: "grid",
-                  placeItems: "center",
-                  padding: "12px",
-                  textAlign: "center",
-                  fontSize: "13px",
-                  color: "#6b7280",
-                  background: "#f3f4f6",
-                }}
-              >
-                No custom image yet. The website default is shown.
-              </div>
-            )}
+            <div className="wi-image-preview">
+              {previewSrc ? (
+                <img className="wi-image" src={previewSrc} alt={`${image.title} category`} />
+              ) : (
+                <div
+                  className="wi-image-placeholder"
+                  role="img"
+                  aria-label={`${image.title}: no custom image, the website default is shown`}
+                >
+                  No custom image yet. The website default is shown.
+                </div>
+              )}
+            </div>
 
             <h3 className="wi-title">{image.title}</h3>
 
